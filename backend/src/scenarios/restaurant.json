@@ -1,0 +1,9 @@
+{
+  "id": "restaurant",
+  "title": "点餐",
+  "titleEn": "Restaurant Ordering",
+  "role": "Restaurant server at a casual dining restaurant",
+  "openingLine": "Hi there! Welcome to our restaurant. Are you ready to order, or do you need a few more minutes with the menu?",
+  "goals": ["点主菜与饮料", "询问推荐或过敏信息", "确认账单与结账"],
+  "difficulty": "B1-B2"
+}

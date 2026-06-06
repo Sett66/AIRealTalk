@@ -11,3 +11,7 @@ export const ScenarioSchema = z.object({
 });
 
 export type Scenario = z.infer<typeof ScenarioSchema>;
+
+export const ScenarioListSchema = z.array(ScenarioSchema);
+
+export type ScenarioList = z.infer<typeof ScenarioListSchema>;

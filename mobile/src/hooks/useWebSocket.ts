@@ -15,22 +15,27 @@ const PING_INTERVAL_MS = 5000;
 const PONG_TIMEOUT_MS = 500;
 
 type UseWebSocketOptions = {
+  scenarioId: string;
+  enabled?: boolean;
   onServerEvent?: (event: ServerWsEvent) => void;
 };
 
-export function useWebSocket(options?: UseWebSocketOptions) {
-  const [status, setStatus] = useState<WsConnectionStatus>('connecting');
+export function useWebSocket(options: UseWebSocketOptions) {
+  const { scenarioId, enabled = true, onServerEvent } = options;
+  const [status, setStatus] = useState<WsConnectionStatus>(
+    enabled ? 'connecting' : 'disconnected',
+  );
   const [lastPongMs, setLastPongMs] = useState<number | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const pingSentAtRef = useRef<number | null>(null);
   const pingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const shouldReconnectRef = useRef(true);
-  const onServerEventRef = useRef(options?.onServerEvent);
+  const onServerEventRef = useRef(onServerEvent);
 
   useEffect(() => {
-    onServerEventRef.current = options?.onServerEvent;
-  }, [options?.onServerEvent]);
+    onServerEventRef.current = onServerEvent;
+  }, [onServerEvent]);
 
   const clearPingTimer = useCallback(() => {
     if (pingTimerRef.current) {
@@ -77,6 +82,10 @@ export function useWebSocket(options?: UseWebSocketOptions) {
   }, []);
 
   const connect = useCallback(() => {
+    if (!enabled) {
+      return;
+    }
+
     clearReconnectTimer();
     clearPingTimer();
 
@@ -98,9 +107,7 @@ export function useWebSocket(options?: UseWebSocketOptions) {
       setStatus('connected');
       ws.send(
         JSON.stringify(
-          createClientEvent(WS_EVENTS.SESSION_CONNECT, {
-            scenarioId: 'interview',
-          }),
+          createClientEvent(WS_EVENTS.SESSION_CONNECT, { scenarioId }),
         ),
       );
       sendPing();
@@ -125,14 +132,31 @@ export function useWebSocket(options?: UseWebSocketOptions) {
       clearPingTimer();
       setStatus('disconnected');
 
-      if (shouldReconnectRef.current) {
+      if (shouldReconnectRef.current && enabled) {
         reconnectTimerRef.current = setTimeout(connect, 2000);
       }
     };
-  }, [clearPingTimer, clearReconnectTimer, handleServerEvent, sendPing]);
+  }, [
+    clearPingTimer,
+    clearReconnectTimer,
+    enabled,
+    handleServerEvent,
+    scenarioId,
+    sendPing,
+  ]);
 
   useEffect(() => {
-    shouldReconnectRef.current = true;
+    shouldReconnectRef.current = enabled;
+
+    if (!enabled) {
+      clearPingTimer();
+      clearReconnectTimer();
+      wsRef.current?.close();
+      wsRef.current = null;
+      setStatus('disconnected');
+      return;
+    }
+
     connect();
 
     return () => {
@@ -142,7 +166,7 @@ export function useWebSocket(options?: UseWebSocketOptions) {
       wsRef.current?.close();
       wsRef.current = null;
     };
-  }, [clearPingTimer, clearReconnectTimer, connect]);
+  }, [clearPingTimer, clearReconnectTimer, connect, enabled]);
 
   const pingNow = useCallback(() => {
     pingSentAtRef.current = Date.now();
