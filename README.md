@@ -25,6 +25,7 @@
 | 文档 | 说明 |
 |------|------|
 | [SPEC.md](docs/SPEC.md) | 需求、架构、协议、Agent 标准（最高优先级） |
+| [PR_GUIDE.md](docs/PR_GUIDE.md) | **Pull Request 提交规范**（标题、描述、分支流程） |
 | [Issues 索引](docs/issues/README.md) | 10 个可独立领取的垂直切片任务 |
 | [Phase 0 — 工程基建](docs/phases/phase-0.md) | Monorepo + WebSocket |
 | [Phase 1 — 语音管线](docs/phases/phase-1.md) | ASR + LLM + TTS |
@@ -67,6 +68,21 @@ pnpm android          # 终端 2：构建并安装到模拟器/真机
 ```bash
 pnpm -r build         # 编译 shared + backend + mobile 类型检查
 pnpm lint             # 各包 lint
+```
+
+### 提交代码（PR 规范）
+
+新功能通过 **Pull Request** 合入 `main`，详见 [docs/PR_GUIDE.md](docs/PR_GUIDE.md)。
+
+```bash
+# 一次性：安装并登录 GitHub CLI
+winget install --id GitHub.cli -e
+gh auth login
+
+# 每个 Issue 完成后
+git checkout -b feat/issue-XX-描述
+git push -u origin HEAD
+gh pr create    # 按模板填写：功能描述 / 实现思路 / 测试方式
 ```
 
 ## 项目结构

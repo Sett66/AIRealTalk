@@ -1,0 +1,29 @@
+---
+description: PR 提交规范 — 所有 Issue 交付必须通过 Pull Request，并按模板填写描述
+alwaysApply: true
+---
+
+# Pull Request 工作流（强制）
+
+完成 Issue 或功能开发后，**禁止直接 push 到 main**。必须：
+
+1. 从 `main` 拉取功能分支：`feat/issue-XX-描述`
+2. 运行 `pnpm -r build` 通过
+3. `git push -u origin HEAD`
+4. 使用 `gh pr create` 创建 PR（需已 `gh auth login`）
+
+## PR 必填内容
+
+- **标题**：一句话说明新增/修改了什么
+- **描述三节**（见 `docs/PR_GUIDE.md` 与 `.github/pull_request_template.md`）：
+  - 功能描述
+  - 实现思路
+  - 测试方式
+
+## 范围约束
+
+- 一个 PR 只做一件事；大功能拆多个 PR
+- 不提交 `.env`、API Key
+- 合并后 main 须可构建、可演示
+
+详细规范：`docs/PR_GUIDE.md`

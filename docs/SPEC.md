@@ -300,7 +300,8 @@ USE_MOCK_PRONUNCIATION=false
 3. 确认 **Blocked by** 前置 Issue 已完成
 4. **仅实现当前 Issue 范围**，不提前做后续 Issue
 5. 垂直切片：改动贯穿 shared → backend → mobile
-6. 逐条勾选验收标准，写入 PR/提交说明
+6. 逐条勾选验收标准，写入 PR 描述（见 [PR_GUIDE.md](./PR_GUIDE.md)）
+7. 通过 Pull Request 合入 `main`，禁止直接 push 功能到主分支
 
 ### 7.2 代码规范
 
@@ -327,6 +328,18 @@ USE_MOCK_PRONUNCIATION=false
 - `pnpm -r build` 通过
 - Android 真机/模拟器可演示该 Issue 端到端行为
 - 未引入 7.3 禁止项
+
+### 7.6 PR 提交规范
+
+所有新功能通过 **Pull Request** 合入 `main`。完整流程见 [docs/PR_GUIDE.md](./PR_GUIDE.md)。
+
+| 要求 | 说明 |
+|------|------|
+| 一事一 PR | 每个 PR 只实现一个 Issue 或一项独立功能；大功能拆多个小 PR |
+| 标题 | 一句话说明本 PR 新增或修改了什么 |
+| 描述三节 | **功能描述**、**实现思路**、**测试方式**（模板：`.github/pull_request_template.md`） |
+| 可运行 | 合并后 `main` 须 `pnpm -r build` 通过，Reviewer 可复现演示 |
+| 工具 | 推荐 [GitHub CLI](https://cli.github.com/)：`gh auth login` → `gh pr create` |
 
 ### 7.5 MVP 完成定义（Issue #10 后）
 
@@ -411,6 +424,7 @@ pnpm --filter @airealtalk/mobile android
 | 文档 | 读者 | 用途 |
 |------|------|------|
 | [SPEC.md](./SPEC.md) | 所有 Agent | 需求与规约（最高优先级） |
+| [PR_GUIDE.md](./PR_GUIDE.md) | 所有贡献者 | Pull Request 提交规范 |
 | [phases/](./phases/) | 阶段负责人 | 阶段目标与风险 |
 | [issues/](./issues/) | 执行 Agent | 可领取任务与验收标准 |
 | [README.md](../README.md) | 所有人 | 项目简介与导航 |
