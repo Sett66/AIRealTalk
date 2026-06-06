@@ -35,6 +35,7 @@
 4. 仅实现「在范围内」项，不越界
 5. 完成后逐条勾选验收标准
 6. 运行 `pnpm -r build` 验证
+7. 按 [PR_GUIDE.md](../PR_GUIDE.md) 创建 Pull Request，**禁止直接 push 到 main**
 
 ## 类型
 
