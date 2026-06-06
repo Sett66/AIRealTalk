@@ -424,6 +424,7 @@ pnpm --filter @airealtalk/mobile android
 | 文档 | 读者 | 用途 |
 |------|------|------|
 | [SPEC.md](./SPEC.md) | 所有 Agent | 需求与规约（最高优先级） |
+| [PR_GUIDE.md](./PR_GUIDE.md) | 所有贡献者 | Pull Request 提交规范 |
 | [phases/](./phases/) | 阶段负责人 | 阶段目标与风险 |
 | [issues/](./issues/) | 执行 Agent | 可领取任务与验收标准 |
 | [README.md](../README.md) | 所有人 | 项目简介与导航 |
