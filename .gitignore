@@ -1,0 +1,45 @@
+# Dependencies
+node_modules/
+# mobile/node_modules contains junctions created by postinstall
+mobile/node_modules/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+
+# React Native
+mobile/.gradle/
+mobile/android/app/build/
+mobile/android/build/
+mobile/android/.gradle/
+mobile/ios/Pods/
+mobile/ios/build/
+*.jks
+*.keystore
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Metro
+.metro-health-check*
+
+# Coverage
+coverage/
