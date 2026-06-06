@@ -3,7 +3,9 @@ import {
   ServerWsEventSchema,
   WS_EVENTS,
   createClientEvent,
+  type ClientWsEventType,
   type ServerWsEvent,
+  type WsEventMap,
 } from '@airealtalk/shared';
 import { WS_BASE_URL } from '../config';
 
@@ -12,7 +14,11 @@ export type WsConnectionStatus = 'connecting' | 'connected' | 'disconnected';
 const PING_INTERVAL_MS = 5000;
 const PONG_TIMEOUT_MS = 500;
 
-export function useWebSocket() {
+type UseWebSocketOptions = {
+  onServerEvent?: (event: ServerWsEvent) => void;
+};
+
+export function useWebSocket(options?: UseWebSocketOptions) {
   const [status, setStatus] = useState<WsConnectionStatus>('connecting');
   const [lastPongMs, setLastPongMs] = useState<number | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -20,6 +26,11 @@ export function useWebSocket() {
   const pingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const shouldReconnectRef = useRef(true);
+  const onServerEventRef = useRef(options?.onServerEvent);
+
+  useEffect(() => {
+    onServerEventRef.current = options?.onServerEvent;
+  }, [options?.onServerEvent]);
 
   const clearPingTimer = useCallback(() => {
     if (pingTimerRef.current) {
@@ -45,11 +56,24 @@ export function useWebSocket() {
     ws.send(JSON.stringify(createClientEvent(WS_EVENTS.SESSION_PING, {})));
   }, []);
 
+  const sendEvent = useCallback(
+    <T extends ClientWsEventType>(type: T, payload: WsEventMap[T]): boolean => {
+      const ws = wsRef.current;
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        return false;
+      }
+      ws.send(JSON.stringify(createClientEvent(type, payload)));
+      return true;
+    },
+    [],
+  );
+
   const handleServerEvent = useCallback((event: ServerWsEvent) => {
     if (event.type === WS_EVENTS.SESSION_PONG && pingSentAtRef.current) {
       setLastPongMs(Date.now() - pingSentAtRef.current);
       pingSentAtRef.current = null;
     }
+    onServerEventRef.current?.(event);
   }, []);
 
   const connect = useCallback(() => {
@@ -85,7 +109,7 @@ export function useWebSocket() {
         const event = ServerWsEventSchema.parse(json);
         handleServerEvent(event);
       } catch {
-        // Ignore malformed server events in debug UI
+        // Ignore malformed server events
       }
     };
 
@@ -125,6 +149,7 @@ export function useWebSocket() {
     status,
     lastPongMs,
     pingNow,
+    sendEvent,
     pongWithinBudget: lastPongMs !== null && lastPongMs <= PONG_TIMEOUT_MS,
   };
 }

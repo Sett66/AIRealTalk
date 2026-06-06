@@ -36,7 +36,8 @@
 
 ## Phase 验收标准
 
-- [ ] Issue #03、#04 全部 checkbox 通过
+- [x] Issue #03 全部 checkbox 通过
+- [ ] Issue #04 全部 checkbox 通过
 - [ ] 说一句英文，听到 AI 英文回复
 - [ ] 局域网端到端延迟 < 3s
 - [ ] mobile 无 API Key

@@ -8,14 +8,10 @@ const path = require('path');
 const repoRoot = path.resolve(__dirname, '..');
 const rootNodeModules = path.join(repoRoot, 'node_modules');
 const mobileNodeModules = path.join(repoRoot, 'mobile', 'node_modules');
+const mobilePkgPath = path.join(repoRoot, 'mobile', 'package.json');
 
-const packagesToLink = [
-  'react',
-  'react-native',
-  'react-native-safe-area-context',
-  '@react-native/new-app-screen',
-  '@airealtalk/shared',
-];
+const mobilePkg = JSON.parse(fs.readFileSync(mobilePkgPath, 'utf8'));
+const packagesToLink = Object.keys(mobilePkg.dependencies || {});
 
 function ensureDir(dir) {
   if (!fs.existsSync(dir)) {

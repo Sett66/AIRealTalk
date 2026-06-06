@@ -83,7 +83,7 @@ AIRealTalk/
 ## Agent 快速上手
 
 1. 阅读 [docs/SPEC.md](docs/SPEC.md)
-2. **Issue #02 已完成**，下一项：[Issue #03 — ASR 管线](docs/issues/issue-03.md)
+2. **Issue #04 进行中**，文档：[Issue #04 — LLM + TTS](docs/issues/issue-04.md)
 3. 确认前置 Issue 已完成再领取任务
 4. **禁止** Expo、禁止 API Key 写入 mobile
 
@@ -94,13 +94,14 @@ AIRealTalk/
 
 ## 项目状态
 
-**当前进度**：Phase 0 已完成 → 进入 [Phase 1 — 语音管线](docs/phases/phase-1.md)
+**当前进度**：Phase 1 进行中 — [Issue #04 LLM + TTS](docs/issues/issue-04.md)
 
 | Issue | 状态 |
 |-------|------|
 | [#01](docs/issues/issue-01.md) Monorepo 基建 | ✅ |
 | [#02](docs/issues/issue-02.md) WebSocket 会话连通 | ✅ |
-| [#03](docs/issues/issue-03.md) ASR 语音管线 | 待开始 |
+| [#03](docs/issues/issue-03.md) ASR 语音转写 | ✅ |
+| [#04](docs/issues/issue-04.md) LLM + TTS | 🚧 进行中 |
 
 ## 许可证
 
