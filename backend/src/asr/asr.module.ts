@@ -23,6 +23,6 @@ import { MockAsrService } from './mock-asr.service';
       inject: [ConfigService, MockAsrService, AliyunAsrService],
     },
   ],
-  exports: [AsrService],
+  exports: [AsrService, AliyunTokenService],
 })
 export class AsrModule {}

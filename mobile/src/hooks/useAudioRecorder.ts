@@ -9,7 +9,7 @@ import type { useWebSocket } from './useWebSocket';
 
 type SendEvent = ReturnType<typeof useWebSocket>['sendEvent'];
 
-export type RecordingState = 'idle' | 'recording' | 'processing';
+export type RecordingState = 'idle' | 'recording' | 'processing' | 'speaking';
 
 const isNativeAudioAvailable = NativeModules.RNAudioRecord != null;
 
@@ -100,6 +100,10 @@ export function useAudioRecorder({ sendEvent, wsConnected }: UseAudioRecorderOpt
     setRecordingState('idle');
   }, []);
 
+  const setSpeaking = useCallback(() => {
+    setRecordingState('speaking');
+  }, []);
+
   return {
     permission,
     recordingState,
@@ -108,5 +112,6 @@ export function useAudioRecorder({ sendEvent, wsConnected }: UseAudioRecorderOpt
     startRecording,
     stopRecording,
     resetToIdle,
+    setSpeaking,
   };
 }

@@ -10,7 +10,7 @@
 
 **规则**：仅当「Blocked by」所列 Issue 验收通过后，方可开始当前 Issue。
 
-**当前进行中**：[Issue #04 — LLM → TTS 播放](./issue-04.md)
+**当前进行中**：[Issue #05 — 单场景完整对话环](./issue-05.md)
 
 ## Issue 列表
 
@@ -19,7 +19,7 @@
 | 01 | Monorepo TS 基建 ✅ | 0 | 无 | [issue-01.md](./issue-01.md) |
 | 02 | WebSocket 会话连通 ✅ | 0 | #01 | [issue-02.md](./issue-02.md) |
 | 03 | 语音上传 → ASR → 转写 ✅ | 1 | #02 | [issue-03.md](./issue-03.md) |
-| 04 | LLM → TTS 播放 | 1 | #03 | [issue-04.md](./issue-04.md) |
+| 04 | LLM → TTS 播放 ✅ | 1 | #03 | [issue-04.md](./issue-04.md) |
 | 05 | 单场景完整对话环 | 2 | #04 | [issue-05.md](./issue-05.md) |
 | 06 | 三场景 + UI 状态机 | 2 | #05 | [issue-06.md](./issue-06.md) |
 | 07 | 对话中轻提示纠错 | 3 | #06 | [issue-07.md](./issue-07.md) |

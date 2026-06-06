@@ -8,18 +8,29 @@ import {
 } from 'react-native';
 import { WS_EVENTS, type ServerWsEvent } from '@airealtalk/shared';
 import { useAudioRecorder } from '../hooks/useAudioRecorder';
+import { useTtsPlayer } from '../hooks/useTtsPlayer';
 import { useWebSocket } from '../hooks/useWebSocket';
 
 interface TranscriptEntry {
   id: string;
   text: string;
+  role: 'user' | 'assistant';
 }
 
 export function ConversationScreen() {
   const [transcripts, setTranscripts] = useState<TranscriptEntry[]>([]);
   const [partialText, setPartialText] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isAiSpeaking, setIsAiSpeaking] = useState(false);
   const resetToIdleRef = useRef<() => void>(() => {});
+  const setSpeakingRef = useRef<() => void>(() => {});
+
+  const { onTtsStart, onTtsChunk, onTtsEnd } = useTtsPlayer({
+    onPlaybackComplete: () => {
+      setIsAiSpeaking(false);
+      resetToIdleRef.current();
+    },
+  });
 
   const { status, sendEvent } = useWebSocket({
     onServerEvent: (event: ServerWsEvent) => {
@@ -34,14 +45,37 @@ export function ConversationScreen() {
           if (text) {
             setTranscripts((prev) => [
               ...prev,
-              { id: event.payload.utteranceId, text },
+              { id: event.payload.utteranceId, text, role: 'user' },
             ]);
           }
-          resetToIdleRef.current();
           break;
         }
+        case WS_EVENTS.SESSION_PHASE:
+          if (event.payload.phase === 'speaking') {
+            setIsAiSpeaking(true);
+            setSpeakingRef.current();
+          }
+          break;
+        case WS_EVENTS.TTS_START: {
+          const reply = event.payload.reply.trim();
+          if (reply) {
+            setTranscripts((prev) => [
+              ...prev,
+              { id: `ai-${Date.now()}`, text: reply, role: 'assistant' },
+            ]);
+          }
+          void onTtsStart();
+          break;
+        }
+        case WS_EVENTS.TTS_CHUNK:
+          void onTtsChunk(event.payload.data);
+          break;
+        case WS_EVENTS.TTS_END:
+          onTtsEnd();
+          break;
         case WS_EVENTS.ERROR:
           setErrorMessage(event.payload.message);
+          setIsAiSpeaking(false);
           resetToIdleRef.current();
           break;
         default:
@@ -58,6 +92,7 @@ export function ConversationScreen() {
     startRecording,
     stopRecording,
     resetToIdle,
+    setSpeaking,
   } = useAudioRecorder({
     sendEvent,
     wsConnected: status === 'connected',
@@ -65,7 +100,8 @@ export function ConversationScreen() {
 
   useEffect(() => {
     resetToIdleRef.current = resetToIdle;
-  }, [resetToIdle]);
+    setSpeakingRef.current = setSpeaking;
+  }, [resetToIdle, setSpeaking]);
 
   const wsColor =
     status === 'connected' ? '#16a34a' : status === 'connecting' ? '#ca8a04' : '#dc2626';
@@ -75,12 +111,22 @@ export function ConversationScreen() {
 
   const isRecording = recordingState === 'recording';
   const isProcessing = recordingState === 'processing';
+  const isSpeaking = recordingState === 'speaking' || isAiSpeaking;
+  const isBusy = isProcessing || isSpeaking;
+
+  const pttLabel = isRecording
+    ? '松手结束'
+    : isSpeaking
+      ? 'AI 正在说话…'
+      : isProcessing
+        ? '处理中…'
+        : '按住说话';
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>AIRealTalk</Text>
-        <Text style={styles.subtitle}>Issue #03 · 按住说话 ASR 转写</Text>
+        <Text style={styles.subtitle}>Issue #04 · 说一句，听 AI 回一句</Text>
         <View style={styles.wsRow}>
           <View style={[styles.indicator, { backgroundColor: wsColor }]} />
           <Text style={[styles.wsText, { color: wsColor }]}>{wsLabel}</Text>
@@ -95,8 +141,13 @@ export function ConversationScreen() {
         )}
 
         {transcripts.map((entry) => (
-          <View key={entry.id} style={styles.bubble}>
-            <Text style={styles.bubbleLabel}>你</Text>
+          <View
+            key={entry.id}
+            style={entry.role === 'user' ? styles.userBubble : styles.aiBubble}
+          >
+            <Text style={entry.role === 'user' ? styles.userLabel : styles.aiLabel}>
+              {entry.role === 'user' ? '你' : 'AI'}
+            </Text>
             <Text style={styles.bubbleText}>{entry.text}</Text>
           </View>
         ))}
@@ -109,8 +160,9 @@ export function ConversationScreen() {
         )}
 
         {isProcessing && !partialText && (
-          <Text style={styles.processingText}>正在转写…</Text>
+          <Text style={styles.processingText}>正在转写与生成回复…</Text>
         )}
+
       </ScrollView>
 
       {!nativeAvailable && (
@@ -142,16 +194,14 @@ export function ConversationScreen() {
         style={[
           styles.pttButton,
           isRecording && styles.pttButtonActive,
-          (status !== 'connected' || isProcessing || !nativeAvailable) &&
+          (status !== 'connected' || isBusy || !nativeAvailable) &&
             styles.pttButtonDisabled,
         ]}
-        disabled={status !== 'connected' || isProcessing || !nativeAvailable}
+        disabled={status !== 'connected' || isBusy || !nativeAvailable}
         onPressIn={() => void startRecording()}
         onPressOut={() => void stopRecording()}
       >
-        <Text style={styles.pttButtonText}>
-          {isRecording ? '松手结束' : isProcessing ? '转写中…' : '按住说话'}
-        </Text>
+        <Text style={styles.pttButtonText}>{pttLabel}</Text>
       </Pressable>
     </View>
   );
@@ -213,7 +263,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 40,
   },
-  bubble: {
+  userBubble: {
     alignSelf: 'flex-end',
     backgroundColor: '#dbeafe',
     borderRadius: 14,
@@ -221,15 +271,35 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     maxWidth: '90%',
   },
-  bubbleLabel: {
+  aiBubble: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#dcfce7',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    maxWidth: '90%',
+  },
+  userLabel: {
     fontSize: 11,
     color: '#3b82f6',
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  aiLabel: {
+    fontSize: 11,
+    color: '#16a34a',
     fontWeight: '600',
     marginBottom: 2,
   },
   bubbleText: {
     fontSize: 16,
     color: '#1e293b',
+    lineHeight: 22,
+  },
+  speakingText: {
+    fontSize: 16,
+    color: '#166534',
+    fontStyle: 'italic',
     lineHeight: 22,
   },
   partialBubble: {
