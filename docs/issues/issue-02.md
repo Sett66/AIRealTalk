@@ -1,6 +1,7 @@
 # Issue #02：WebSocket 会话连通
 
-**父文档（权威）**：[docs/SPEC.md](../SPEC.md)
+**父文档（权威）**：[docs/SPEC.md](../SPEC.md)  
+**状态**：✅ 已完成（2026-06-06）
 
 ## 要构建什么（端到端纵向切片）
 
@@ -15,11 +16,11 @@
 
 ## 验收标准
 
-- [ ] mobile 启动后自动连接 WS，状态显示「已连接」（绿色）
-- [ ] 发送 `session:ping` 后 500ms 内收到 `session:pong`（局域网）
-- [ ] 关闭 backend 后 mobile 显示「已断开」（红色）
-- [ ] 所有 WS 事件类型来自 `@airealtalk/shared`，无手写字符串散落
-- [ ] 不破坏 Issue #01 的 `/health` 与构建
+- [x] mobile 启动后自动连接 WS，状态显示「已连接」（绿色）
+- [x] 发送 `session:ping` 后 500ms 内收到 `session:pong`（局域网）
+- [x] 关闭 backend 后 mobile 显示「已断开」（红色）
+- [x] 所有 WS 事件类型来自 `@airealtalk/shared`，无手写字符串散落
+- [x] 不破坏 Issue #01 的 `/health` 与构建
 
 ## 阻塞关系
 
@@ -48,3 +49,12 @@
 ### 参考 SPEC 章节
 
 - 5.2 WebSocket 事件、4.3 VoiceSessionGateway、7.2 代码规范
+
+## 完成备注
+
+- `packages/shared`：`WsEventMap`、`WS_EVENTS` 常量、`createClientEvent` / `createServerEvent`
+- `backend/src/voice-session.gateway.ts`：处理 `session:connect` / `session:ping`，回复 `session:pong`
+- `mobile/src/hooks/useWebSocket.ts`：自动连接、周期心跳、断线重连与状态
+- `mobile/src/config.ts`：`WS_BASE_URL`（模拟器默认 `ws://10.0.2.2:3000`）
+- 本地验证：ping/pong 延迟约 32ms；`GET /health` 仍返回 200
+- **人工验收**（2026-06-06）：Android 端自动连接、ping/pong、断线状态均通过

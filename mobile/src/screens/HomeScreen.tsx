@@ -8,7 +8,8 @@ import {
 } from 'react-native';
 import type { HealthResponse } from '@airealtalk/shared';
 import { HealthResponseSchema } from '@airealtalk/shared';
-import { API_BASE_URL } from '../config';
+import { API_BASE_URL, WS_BASE_URL } from '../config';
+import { useWebSocket } from '../hooks/useWebSocket';
 
 type LoadState = 'idle' | 'loading' | 'ok' | 'error';
 
@@ -16,6 +17,7 @@ export function HomeScreen() {
   const [state, setState] = useState<LoadState>('idle');
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const { status, lastPongMs, pingNow, pongWithinBudget } = useWebSocket();
 
   const fetchHealth = useCallback(async () => {
     setState('loading');
@@ -41,10 +43,47 @@ export function HomeScreen() {
     void fetchHealth();
   }, [fetchHealth]);
 
+  const wsStatusLabel =
+    status === 'connected'
+      ? '已连接'
+      : status === 'connecting'
+        ? '连接中'
+        : '已断开';
+
+  const wsStatusColor =
+    status === 'connected'
+      ? '#16a34a'
+      : status === 'connecting'
+        ? '#ca8a04'
+        : '#dc2626';
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>AIRealTalk</Text>
-      <Text style={styles.subtitle}>英语口语练习 · Issue #01 基建</Text>
+      <Text style={styles.subtitle}>英语口语练习 · Issue #02 WebSocket</Text>
+
+      <View style={styles.card}>
+        <Text style={styles.cardLabel}>WebSocket 会话</Text>
+        <Text style={styles.apiUrl}>{WS_BASE_URL}</Text>
+
+        <View style={styles.wsRow}>
+          <View style={[styles.indicator, { backgroundColor: wsStatusColor }]} />
+          <Text style={[styles.wsStatusText, { color: wsStatusColor }]}>
+            {wsStatusLabel}
+          </Text>
+        </View>
+
+        {status === 'connected' && lastPongMs !== null && (
+          <Text style={styles.pongText}>
+            最近 pong 延迟：{lastPongMs}ms
+            {pongWithinBudget ? ' ✓' : ' (超过 500ms)'}
+          </Text>
+        )}
+
+        <Pressable style={styles.secondaryButton} onPress={pingNow}>
+          <Text style={styles.secondaryButtonText}>发送 Ping</Text>
+        </Pressable>
+      </View>
 
       <View style={styles.card}>
         <Text style={styles.cardLabel}>Backend 健康检查</Text>
@@ -54,7 +93,7 @@ export function HomeScreen() {
 
         {state === 'ok' && health && (
           <View style={styles.resultOk}>
-            <Text style={styles.statusBadge}>● 已连接</Text>
+            <Text style={styles.statusBadge}>● REST 正常</Text>
             <Text style={styles.resultText}>status: {health.status}</Text>
             <Text style={styles.resultText}>timestamp: {health.timestamp}</Text>
           </View>
@@ -62,7 +101,7 @@ export function HomeScreen() {
 
         {state === 'error' && (
           <View style={styles.resultError}>
-            <Text style={styles.statusBadgeError}>● 未连接</Text>
+            <Text style={styles.statusBadgeError}>● REST 失败</Text>
             <Text style={styles.errorText}>{errorMessage}</Text>
             <Text style={styles.hint}>
               请启动 backend，真机请将 src/config.ts 中的 IP 改为电脑局域网地址。
@@ -84,6 +123,7 @@ const styles = StyleSheet.create({
     padding: 24,
     justifyContent: 'center',
     backgroundColor: '#f8fafc',
+    gap: 16,
   },
   title: {
     fontSize: 32,
@@ -96,7 +136,7 @@ const styles = StyleSheet.create({
     color: '#64748b',
     textAlign: 'center',
     marginTop: 8,
-    marginBottom: 32,
+    marginBottom: 16,
   },
   card: {
     backgroundColor: '#ffffff',
@@ -115,6 +155,24 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#94a3b8',
     fontFamily: 'monospace',
+  },
+  wsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  indicator: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
+  wsStatusText: {
+    fontWeight: '600',
+    fontSize: 16,
+  },
+  pongText: {
+    color: '#475569',
+    fontSize: 14,
   },
   resultOk: {
     gap: 4,
@@ -156,5 +214,16 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontWeight: '600',
     fontSize: 15,
+  },
+  secondaryButton: {
+    backgroundColor: '#e2e8f0',
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  secondaryButtonText: {
+    color: '#334155',
+    fontWeight: '600',
+    fontSize: 14,
   },
 });

@@ -12,10 +12,10 @@
 
 ## 包含 Issue
 
-| Issue | 名称 | 文档 | 依赖 |
-|-------|------|------|------|
-| #01 | Monorepo TS 基建 | [issue-01.md](../issues/issue-01.md) | 无 |
-| #02 | WebSocket 会话连通 | [issue-02.md](../issues/issue-02.md) | #01 |
+| Issue | 名称 | 文档 | 依赖 | 状态 |
+|-------|------|------|------|------|
+| #01 | Monorepo TS 基建 | [issue-01.md](../issues/issue-01.md) | 无 | ✅ |
+| #02 | WebSocket 会话连通 | [issue-02.md](../issues/issue-02.md) | #01 | ✅ |
 
 ## 交付物
 
@@ -44,9 +44,11 @@
 ## Phase 验收标准
 
 - [x] Issue #01 全部 checkbox 通过
-- [ ] Issue #02 全部 checkbox 通过
-- [x] `pnpm -r build` 无错误（Issue #01）
-- [ ] Android 真机/模拟器可演示 health + WS 连通（WS 待 Issue #02）
+- [x] Issue #02 全部 checkbox 通过
+- [x] `pnpm -r build` 无错误
+- [x] Android 真机/模拟器可演示 health + WS 连通
+
+**Phase 0 状态**：✅ 已完成（2026-06-06）
 
 ## 风险与缓解
 
