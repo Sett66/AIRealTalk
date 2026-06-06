@@ -1,6 +1,7 @@
 # Issue #01：Monorepo TypeScript 基建
 
-**父文档（权威）**：[docs/SPEC.md](../SPEC.md)
+**父文档（权威）**：[docs/SPEC.md](../SPEC.md)  
+**状态**：✅ 已完成（2026-06-06）
 
 ## 要构建什么（端到端纵向切片）
 
@@ -14,19 +15,20 @@
 - `packages/shared`：导出 `HealthResponse`、WebSocket 事件**占位类型**（命名与 SPEC 对齐）
 - `backend/.env.example`（不含密钥）
 - `.gitignore` 排除 `.env`、`node_modules`、构建产物
+- `scripts/link-mobile-deps.js`：pnpm hoist 场景下为 RN Android 创建 `mobile/node_modules` junction
 
 ## 验收标准
 
-- [ ] 根目录执行 `pnpm install` 无错误
-- [ ] `pnpm -r build` 三包（shared / backend / mobile 类型检查）通过
-- [ ] `pnpm --filter @airealtalk/backend start:dev` 后 `GET /health` 返回 200
-- [ ] RN 应用在 Android 模拟器/真机可启动并显示占位 UI（无红屏）
-- [ ] `packages/shared` 可被 mobile 与 backend 引用，无循环依赖
-- [ ] 无 `.env`、密钥提交进仓库
+- [x] 根目录执行 `pnpm install` 无错误
+- [x] `pnpm -r build` 三包（shared / backend / mobile 类型检查）通过
+- [x] `pnpm --filter @airealtalk/backend start:dev` 后 `GET /health` 返回 200
+- [x] RN 应用在 Android 模拟器/真机可启动并显示占位 UI（无红屏）
+- [x] `packages/shared` 可被 mobile 与 backend 引用，无循环依赖
+- [x] 无 `.env`、密钥提交进仓库
 
 ## 阻塞关系
 
-- **Blocked by**：无（可立即开工）
+- **Blocked by**：无（可 AFK 独立开工）
 - **Blocks**：[Issue #02](./issue-02.md)
 
 ## Agent 交接
@@ -45,8 +47,13 @@
 
 1. 克隆后 `pnpm install`
 2. 启动 backend，`curl http://localhost:3000/health`
-3. 启动 Metro + `pnpm --filter @airealtalk/mobile android`，确认占位页与健康状态
+3. 启动 Metro + `pnpm android`，确认占位页与健康状态
 
 ### 参考 SPEC 章节
 
 - 4.1 技术栈、4.2 目录结构、7.1 工作流程、7.3 禁止事项
+
+## 完成备注
+
+- Android 构建：pnpm hoist 后依赖在根 `node_modules`，通过 `postinstall` junction 解决 RN Gradle 路径问题
+- 模拟器 backend 地址：`10.0.2.2:3000`（`mobile/src/config.ts`）

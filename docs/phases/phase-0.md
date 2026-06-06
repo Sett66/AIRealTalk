@@ -43,9 +43,10 @@
 
 ## Phase 验收标准
 
-- [ ] Issue #01、#02 全部 checkbox 通过
-- [ ] `pnpm -r build` 无错误
-- [ ] Android 真机/模拟器可演示 health + WS 连通
+- [x] Issue #01 全部 checkbox 通过
+- [ ] Issue #02 全部 checkbox 通过
+- [x] `pnpm -r build` 无错误（Issue #01）
+- [ ] Android 真机/模拟器可演示 health + WS 连通（WS 待 Issue #02）
 
 ## 风险与缓解
 

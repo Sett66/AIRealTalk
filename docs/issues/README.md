@@ -14,7 +14,7 @@
 
 | # | 标题 | Phase | Blocked by | 文档 |
 |---|------|-------|------------|------|
-| 01 | Monorepo TS 基建 | 0 | 无 | [issue-01.md](./issue-01.md) |
+| 01 | Monorepo TS 基建 ✅ | 0 | 无 | [issue-01.md](./issue-01.md) |
 | 02 | WebSocket 会话连通 | 0 | #01 | [issue-02.md](./issue-02.md) |
 | 03 | 语音上传 → ASR → 转写 | 1 | #02 | [issue-03.md](./issue-03.md) |
 | 04 | LLM → TTS 播放 | 1 | #03 | [issue-04.md](./issue-04.md) |
