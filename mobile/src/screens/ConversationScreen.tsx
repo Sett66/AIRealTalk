@@ -126,7 +126,7 @@ export function ConversationScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>AIRealTalk</Text>
-        <Text style={styles.subtitle}>Issue #04 · 说一句，听 AI 回一句</Text>
+        <Text style={styles.subtitle}>Issue #05 · 面试场景 · 多轮对话</Text>
         <View style={styles.wsRow}>
           <View style={[styles.indicator, { backgroundColor: wsColor }]} />
           <Text style={[styles.wsText, { color: wsColor }]}>{wsLabel}</Text>
@@ -136,7 +136,7 @@ export function ConversationScreen() {
       <ScrollView style={styles.transcriptArea} contentContainerStyle={styles.transcriptContent}>
         {transcripts.length === 0 && !partialText && (
           <Text style={styles.placeholder}>
-            按住下方按钮说英文，例如：&quot;I&apos;d like a coffee please&quot;
+            连接后将自动播放面试官开场白。准备好后按住按钮用英语自我介绍。
           </Text>
         )}
 

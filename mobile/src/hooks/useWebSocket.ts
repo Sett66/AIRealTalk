@@ -97,7 +97,11 @@ export function useWebSocket(options?: UseWebSocketOptions) {
     ws.onopen = () => {
       setStatus('connected');
       ws.send(
-        JSON.stringify(createClientEvent(WS_EVENTS.SESSION_CONNECT, {})),
+        JSON.stringify(
+          createClientEvent(WS_EVENTS.SESSION_CONNECT, {
+            scenarioId: 'interview',
+          }),
+        ),
       );
       sendPing();
       pingTimerRef.current = setInterval(sendPing, PING_INTERVAL_MS);

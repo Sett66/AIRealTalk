@@ -99,7 +99,7 @@ AIRealTalk/
 ## Agent 快速上手
 
 1. 阅读 [docs/SPEC.md](docs/SPEC.md)
-2. **Issue #05 进行中**，文档：[Issue #05 — 单场景完整对话环](docs/issues/issue-05.md)
+2. **Issue #06 待领取**，文档：[Issue #06 — 三场景 + UI 状态机](docs/issues/issue-06.md)
 3. 确认前置 Issue 已完成再领取任务
 4. **禁止** Expo、禁止 API Key 写入 mobile
 
@@ -110,7 +110,7 @@ AIRealTalk/
 
 ## 项目状态
 
-**当前进度**：Phase 2 待开始 — [Issue #05 单场景完整对话环](docs/issues/issue-05.md)
+**当前进度**：Phase 2 进行中 — [Issue #06 三场景 + UI 状态机](docs/issues/issue-06.md)
 
 | Issue | 状态 |
 |-------|------|
@@ -118,6 +118,7 @@ AIRealTalk/
 | [#02](docs/issues/issue-02.md) WebSocket 会话连通 | ✅ |
 | [#03](docs/issues/issue-03.md) ASR 语音转写 | ✅ |
 | [#04](docs/issues/issue-04.md) LLM + TTS | ✅ |
+| [#05](docs/issues/issue-05.md) 单场景完整对话环 | ✅ |
 
 ## 许可证
 

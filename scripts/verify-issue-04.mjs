@@ -39,7 +39,10 @@ let ttsChunkCount = 0;
 
 ws.on('open', async () => {
   try {
-    send(ws, 'session:connect', {});
+    send(ws, 'session:connect', { scenarioId: 'interview' });
+    await waitFor(ws, (e) => e.type === 'tts:end');
+    console.log('✓ opening tts:end received');
+
     send(ws, 'audio:start', {});
     send(ws, 'audio:chunk', { data: FAKE_AUDIO });
     send(ws, 'audio:end', {});
