@@ -16,9 +16,16 @@ const isNativeAudioAvailable = NativeModules.RNAudioRecord != null;
 type UseAudioRecorderOptions = {
   sendEvent: SendEvent;
   wsConnected: boolean;
+  onRecordingStart?: () => void;
+  onRecordingStop?: () => void;
 };
 
-export function useAudioRecorder({ sendEvent, wsConnected }: UseAudioRecorderOptions) {
+export function useAudioRecorder({
+  sendEvent,
+  wsConnected,
+  onRecordingStart,
+  onRecordingStop,
+}: UseAudioRecorderOptions) {
   const [permission, setPermission] = useState<MicPermissionStatus | 'unknown'>('unknown');
   const [recordingState, setRecordingState] = useState<RecordingState>('idle');
   const isRecordingRef = useRef(false);
@@ -69,9 +76,10 @@ export function useAudioRecorder({ sendEvent, wsConnected }: UseAudioRecorderOpt
 
     isRecordingRef.current = true;
     setRecordingState('recording');
+    onRecordingStart?.();
     AudioRecord.start();
     return true;
-  }, [permission, requestPermission, sendEvent, wsConnected]);
+  }, [onRecordingStart, permission, requestPermission, sendEvent, wsConnected]);
 
   const stopRecording = useCallback(async () => {
     if (!isRecordingRef.current) {
@@ -80,6 +88,7 @@ export function useAudioRecorder({ sendEvent, wsConnected }: UseAudioRecorderOpt
 
     isRecordingRef.current = false;
     setRecordingState('processing');
+    onRecordingStop?.();
 
     try {
       const wavPath = await AudioRecord.stop();
@@ -94,7 +103,7 @@ export function useAudioRecorder({ sendEvent, wsConnected }: UseAudioRecorderOpt
     } catch {
       sendEvent(WS_EVENTS.AUDIO_END, {});
     }
-  }, [sendEvent]);
+  }, [onRecordingStop, sendEvent]);
 
   const resetToIdle = useCallback(() => {
     setRecordingState('idle');

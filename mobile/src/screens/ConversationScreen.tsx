@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -7,9 +7,13 @@ import {
   View,
 } from 'react-native';
 import { WS_EVENTS, type ServerWsEvent } from '@airealtalk/shared';
+import { AudioWave } from '../components/AudioWave';
+import { PhaseIndicator } from '../components/PhaseIndicator';
+import { ScreenContainer } from '../components/ScreenContainer';
 import { useAudioRecorder } from '../hooks/useAudioRecorder';
 import { useTtsPlayer } from '../hooks/useTtsPlayer';
 import { useWebSocket } from '../hooks/useWebSocket';
+import { useSessionStore } from '../stores/session-store';
 
 interface TranscriptEntry {
   id: string;
@@ -17,22 +21,40 @@ interface TranscriptEntry {
   role: 'user' | 'assistant';
 }
 
-export function ConversationScreen() {
+type ConversationScreenProps = {
+  scenarioId: string;
+  scenarioTitle: string;
+  onBack: () => void;
+};
+
+export function ConversationScreen({
+  scenarioId,
+  scenarioTitle,
+  onBack,
+}: ConversationScreenProps) {
   const [transcripts, setTranscripts] = useState<TranscriptEntry[]>([]);
   const [partialText, setPartialText] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [isAiSpeaking, setIsAiSpeaking] = useState(false);
+  const phase = useSessionStore((state) => state.phase);
+  const setPhase = useSessionStore((state) => state.setPhase);
+  const resetPhase = useSessionStore((state) => state.resetPhase);
   const resetToIdleRef = useRef<() => void>(() => {});
   const setSpeakingRef = useRef<() => void>(() => {});
 
+  useEffect(() => {
+    resetPhase();
+    return () => resetPhase();
+  }, [resetPhase, scenarioId]);
+
   const { onTtsStart, onTtsChunk, onTtsEnd } = useTtsPlayer({
     onPlaybackComplete: () => {
-      setIsAiSpeaking(false);
+      resetPhase();
       resetToIdleRef.current();
     },
   });
 
   const { status, sendEvent } = useWebSocket({
+    scenarioId,
     onServerEvent: (event: ServerWsEvent) => {
       switch (event.type) {
         case WS_EVENTS.ASR_PARTIAL:
@@ -51,8 +73,10 @@ export function ConversationScreen() {
           break;
         }
         case WS_EVENTS.SESSION_PHASE:
-          if (event.payload.phase === 'speaking') {
-            setIsAiSpeaking(true);
+          if (event.payload.phase === 'processing') {
+            setPhase('processing');
+          } else if (event.payload.phase === 'speaking') {
+            setPhase('speaking');
             setSpeakingRef.current();
           }
           break;
@@ -64,6 +88,7 @@ export function ConversationScreen() {
               { id: `ai-${Date.now()}`, text: reply, role: 'assistant' },
             ]);
           }
+          setPhase('speaking');
           void onTtsStart();
           break;
         }
@@ -75,7 +100,7 @@ export function ConversationScreen() {
           break;
         case WS_EVENTS.ERROR:
           setErrorMessage(event.payload.message);
-          setIsAiSpeaking(false);
+          resetPhase();
           resetToIdleRef.current();
           break;
         default:
@@ -86,7 +111,6 @@ export function ConversationScreen() {
 
   const {
     permission,
-    recordingState,
     nativeAvailable,
     requestPermission,
     startRecording,
@@ -96,6 +120,8 @@ export function ConversationScreen() {
   } = useAudioRecorder({
     sendEvent,
     wsConnected: status === 'connected',
+    onRecordingStart: () => setPhase('listening'),
+    onRecordingStop: () => setPhase('processing'),
   });
 
   useEffect(() => {
@@ -109,34 +135,51 @@ export function ConversationScreen() {
   const wsLabel =
     status === 'connected' ? '已连接' : status === 'connecting' ? '连接中' : '已断开';
 
-  const isRecording = recordingState === 'recording';
-  const isProcessing = recordingState === 'processing';
-  const isSpeaking = recordingState === 'speaking' || isAiSpeaking;
-  const isBusy = isProcessing || isSpeaking;
+  const handleExit = useCallback(() => {
+    if (status === 'connected') {
+      sendEvent(WS_EVENTS.SESSION_END, {});
+    }
+    resetPhase();
+    onBack();
+  }, [onBack, resetPhase, sendEvent, status]);
 
-  const pttLabel = isRecording
+  const isBusy = phase === 'processing' || phase === 'speaking';
+  const isListening = phase === 'listening';
+
+  const pttLabel = isListening
     ? '松手结束'
-    : isSpeaking
+    : phase === 'speaking'
       ? 'AI 正在说话…'
-      : isProcessing
+      : phase === 'processing'
         ? '处理中…'
         : '按住说话';
 
   return (
-    <View style={styles.container}>
+    <ScreenContainer style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>AIRealTalk</Text>
-        <Text style={styles.subtitle}>Issue #05 · 面试场景 · 多轮对话</Text>
-        <View style={styles.wsRow}>
-          <View style={[styles.indicator, { backgroundColor: wsColor }]} />
-          <Text style={[styles.wsText, { color: wsColor }]}>{wsLabel}</Text>
+        <Pressable
+          onPress={handleExit}
+          hitSlop={8}
+          style={styles.backButton}
+          accessibilityRole="button"
+          accessibilityLabel="退出对话"
+        >
+          <Text style={styles.backText}>← 退出</Text>
+        </Pressable>
+        <Text style={styles.title}>{scenarioTitle}</Text>
+        <View style={styles.statusRow}>
+          <PhaseIndicator phase={phase} />
+          <View style={styles.wsRow}>
+            <View style={[styles.indicator, { backgroundColor: wsColor }]} />
+            <Text style={[styles.wsText, { color: wsColor }]}>{wsLabel}</Text>
+          </View>
         </View>
       </View>
 
       <ScrollView style={styles.transcriptArea} contentContainerStyle={styles.transcriptContent}>
         {transcripts.length === 0 && !partialText && (
           <Text style={styles.placeholder}>
-            连接后将自动播放面试官开场白。准备好后按住按钮用英语自我介绍。
+            连接后将自动播放 AI 开场白。准备好后按住按钮开始对话。
           </Text>
         )}
 
@@ -159,11 +202,16 @@ export function ConversationScreen() {
           </View>
         )}
 
-        {isProcessing && !partialText && (
+        {phase === 'processing' && !partialText && (
           <Text style={styles.processingText}>正在转写与生成回复…</Text>
         )}
-
       </ScrollView>
+
+      {isListening && (
+        <View style={styles.waveContainer}>
+          <AudioWave active />
+        </View>
+      )}
 
       {!nativeAvailable && (
         <View style={styles.permissionBanner}>
@@ -193,7 +241,7 @@ export function ConversationScreen() {
       <Pressable
         style={[
           styles.pttButton,
-          isRecording && styles.pttButtonActive,
+          isListening && styles.pttButtonActive,
           (status !== 'connected' || isBusy || !nativeAvailable) &&
             styles.pttButtonDisabled,
         ]}
@@ -203,36 +251,48 @@ export function ConversationScreen() {
       >
         <Text style={styles.pttButtonText}>{pttLabel}</Text>
       </Pressable>
-    </View>
+    </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    backgroundColor: '#f8fafc',
     padding: 20,
-    paddingBottom: 32,
+    paddingBottom: 16,
   },
   header: {
-    alignItems: 'center',
     marginBottom: 16,
-    gap: 4,
+    gap: 8,
+  },
+  backButton: {
+    alignSelf: 'flex-start',
+    minHeight: 44,
+    minWidth: 88,
+    justifyContent: 'center',
+    paddingRight: 12,
+    marginBottom: 4,
+  },
+  backText: {
+    color: '#2563eb',
+    fontSize: 15,
+    fontWeight: '600',
   },
   title: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: '700',
     color: '#0f172a',
+    textAlign: 'center',
   },
-  subtitle: {
-    fontSize: 13,
-    color: '#64748b',
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 4,
   },
   wsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginTop: 4,
   },
   indicator: {
     width: 10,
@@ -249,7 +309,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     borderColor: '#e2e8f0',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   transcriptContent: {
     padding: 16,
@@ -296,12 +356,6 @@ const styles = StyleSheet.create({
     color: '#1e293b',
     lineHeight: 22,
   },
-  speakingText: {
-    fontSize: 16,
-    color: '#166534',
-    fontStyle: 'italic',
-    lineHeight: 22,
-  },
   partialBubble: {
     alignSelf: 'flex-end',
     backgroundColor: '#f1f5f9',
@@ -330,6 +384,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
     marginTop: 8,
+  },
+  waveContainer: {
+    alignItems: 'center',
+    marginBottom: 12,
   },
   permissionBanner: {
     backgroundColor: '#fef3c7',

@@ -8,16 +8,19 @@ import {
 } from 'react-native';
 import type { HealthResponse } from '@airealtalk/shared';
 import { HealthResponseSchema } from '@airealtalk/shared';
-import { API_BASE_URL, WS_BASE_URL } from '../config';
-import { useWebSocket } from '../hooks/useWebSocket';
+import { ScreenContainer } from '../components/ScreenContainer';
+import { API_BASE_URL } from '../config';
 
 type LoadState = 'idle' | 'loading' | 'ok' | 'error';
 
-export function HomeScreen() {
+type HomeScreenProps = {
+  onStartPractice: () => void;
+};
+
+export function HomeScreen({ onStartPractice }: HomeScreenProps) {
   const [state, setState] = useState<LoadState>('idle');
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const { status, lastPongMs, pingNow, pongWithinBudget } = useWebSocket();
 
   const fetchHealth = useCallback(async () => {
     setState('loading');
@@ -43,47 +46,10 @@ export function HomeScreen() {
     void fetchHealth();
   }, [fetchHealth]);
 
-  const wsStatusLabel =
-    status === 'connected'
-      ? '已连接'
-      : status === 'connecting'
-        ? '连接中'
-        : '已断开';
-
-  const wsStatusColor =
-    status === 'connected'
-      ? '#16a34a'
-      : status === 'connecting'
-        ? '#ca8a04'
-        : '#dc2626';
-
   return (
-    <View style={styles.container}>
+    <ScreenContainer style={styles.container}>
       <Text style={styles.title}>AIRealTalk</Text>
-      <Text style={styles.subtitle}>英语口语练习 · Issue #02 WebSocket</Text>
-
-      <View style={styles.card}>
-        <Text style={styles.cardLabel}>WebSocket 会话</Text>
-        <Text style={styles.apiUrl}>{WS_BASE_URL}</Text>
-
-        <View style={styles.wsRow}>
-          <View style={[styles.indicator, { backgroundColor: wsStatusColor }]} />
-          <Text style={[styles.wsStatusText, { color: wsStatusColor }]}>
-            {wsStatusLabel}
-          </Text>
-        </View>
-
-        {status === 'connected' && lastPongMs !== null && (
-          <Text style={styles.pongText}>
-            最近 pong 延迟：{lastPongMs}ms
-            {pongWithinBudget ? ' ✓' : ' (超过 500ms)'}
-          </Text>
-        )}
-
-        <Pressable style={styles.secondaryButton} onPress={pingNow}>
-          <Text style={styles.secondaryButtonText}>发送 Ping</Text>
-        </Pressable>
-      </View>
+      <Text style={styles.subtitle}>英语口语练习 · Issue #06</Text>
 
       <View style={styles.card}>
         <Text style={styles.cardLabel}>Backend 健康检查</Text>
@@ -95,7 +61,6 @@ export function HomeScreen() {
           <View style={styles.resultOk}>
             <Text style={styles.statusBadge}>● REST 正常</Text>
             <Text style={styles.resultText}>status: {health.status}</Text>
-            <Text style={styles.resultText}>timestamp: {health.timestamp}</Text>
           </View>
         )}
 
@@ -109,20 +74,26 @@ export function HomeScreen() {
           </View>
         )}
 
-        <Pressable style={styles.button} onPress={() => void fetchHealth()}>
-          <Text style={styles.buttonText}>重新检测</Text>
+        <Pressable style={styles.secondaryButton} onPress={() => void fetchHealth()}>
+          <Text style={styles.secondaryButtonText}>重新检测</Text>
         </Pressable>
       </View>
-    </View>
+
+      <Pressable
+        style={[styles.primaryButton, state !== 'ok' && styles.primaryButtonDisabled]}
+        disabled={state !== 'ok'}
+        onPress={onStartPractice}
+      >
+        <Text style={styles.primaryButtonText}>开始练习</Text>
+      </Pressable>
+    </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
     padding: 24,
     justifyContent: 'center',
-    backgroundColor: '#f8fafc',
     gap: 16,
   },
   title: {
@@ -135,8 +106,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#64748b',
     textAlign: 'center',
-    marginTop: 8,
-    marginBottom: 16,
+    marginBottom: 8,
   },
   card: {
     backgroundColor: '#ffffff',
@@ -155,24 +125,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#94a3b8',
     fontFamily: 'monospace',
-  },
-  wsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  indicator: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-  },
-  wsStatusText: {
-    fontWeight: '600',
-    fontSize: 16,
-  },
-  pongText: {
-    color: '#475569',
-    fontSize: 14,
   },
   resultOk: {
     gap: 4,
@@ -203,18 +155,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
   },
-  button: {
-    marginTop: 8,
-    backgroundColor: '#2563eb',
-    borderRadius: 10,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  buttonText: {
-    color: '#ffffff',
-    fontWeight: '600',
-    fontSize: 15,
-  },
   secondaryButton: {
     backgroundColor: '#e2e8f0',
     borderRadius: 10,
@@ -225,5 +165,19 @@ const styles = StyleSheet.create({
     color: '#334155',
     fontWeight: '600',
     fontSize: 14,
+  },
+  primaryButton: {
+    backgroundColor: '#2563eb',
+    borderRadius: 14,
+    paddingVertical: 18,
+    alignItems: 'center',
+  },
+  primaryButtonDisabled: {
+    backgroundColor: '#94a3b8',
+  },
+  primaryButtonText: {
+    color: '#ffffff',
+    fontWeight: '700',
+    fontSize: 18,
   },
 });

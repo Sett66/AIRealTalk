@@ -5,6 +5,8 @@ import { ScenarioSchema, type Scenario } from '@airealtalk/shared';
 
 const DEFAULT_SCENARIO_ID = 'interview';
 
+const SCENARIO_IDS = ['interview', 'restaurant', 'meeting'] as const;
+
 @Injectable()
 export class ScenarioService {
   private readonly logger = new Logger(ScenarioService.name);
@@ -28,5 +30,9 @@ export class ScenarioService {
     this.cache.set(id, scenario);
     this.logger.log(`Loaded scenario: ${scenario.id}`);
     return scenario;
+  }
+
+  listAll(): Scenario[] {
+    return SCENARIO_IDS.map((id) => this.getById(id));
   }
 }

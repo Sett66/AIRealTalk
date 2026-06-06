@@ -1,0 +1,9 @@
+{
+  "id": "meeting",
+  "title": "会议",
+  "titleEn": "Team Meeting",
+  "role": "Team colleague in a weekly project sync meeting",
+  "openingLine": "Good morning everyone. Let's start with a quick round of updates. What did you work on last week?",
+  "goals": ["汇报进度", "讨论问题与方案", "确认下一步行动"],
+  "difficulty": "B1-B2"
+}
