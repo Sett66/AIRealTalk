@@ -1,0 +1,9 @@
+{
+  "id": "interview",
+  "title": "面试",
+  "titleEn": "Job Interview",
+  "role": "HR interviewer at a tech company",
+  "openingLine": "Hi, thanks for coming in today. Could you start by telling me a bit about yourself?",
+  "goals": ["自我介绍", "回答行为面试题", "反问环节"],
+  "difficulty": "B1-B2"
+}

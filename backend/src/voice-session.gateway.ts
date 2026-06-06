@@ -1,4 +1,4 @@
-import { Logger } from '@nestjs/common';
+import { Logger, NotFoundException } from '@nestjs/common';
 import {
   OnGatewayConnection,
   OnGatewayDisconnect,
@@ -6,6 +6,7 @@ import {
 } from '@nestjs/websockets';
 import { randomUUID } from 'crypto';
 import type { WebSocket } from 'ws';
+import type { Scenario } from '@airealtalk/shared';
 import {
   ClientWsEventSchema,
   WS_EVENTS,
@@ -13,12 +14,19 @@ import {
   type ClientWsEvent,
 } from '@airealtalk/shared';
 import { AsrService } from './asr/asr.service';
-import { LlmService } from './llm/llm.service';
+import { LlmService, type ChatMessage } from './llm/llm.service';
+import { ScenarioService } from './scenario/scenario.service';
 import { TtsService } from './tts/tts.service';
 
-interface ClientSession {
+interface SessionState {
+  scenarioId: string;
+  scenario: Scenario;
+  messages: ChatMessage[];
+  turnCount: number;
   audioChunks: Buffer[];
   isRecording: boolean;
+  openingComplete: boolean;
+  isSpeaking: boolean;
 }
 
 @WebSocketGateway({ path: '/', cors: { origin: '*' } })
@@ -26,17 +34,17 @@ export class VoiceSessionGateway
   implements OnGatewayConnection, OnGatewayDisconnect
 {
   private readonly logger = new Logger(VoiceSessionGateway.name);
-  private readonly sessions = new WeakMap<WebSocket, ClientSession>();
+  private readonly sessions = new WeakMap<WebSocket, SessionState>();
 
   constructor(
     private readonly asrService: AsrService,
     private readonly llmService: LlmService,
     private readonly ttsService: TtsService,
+    private readonly scenarioService: ScenarioService,
   ) {}
 
   handleConnection(client: WebSocket): void {
     this.logger.log('WebSocket client connected');
-    this.sessions.set(client, { audioChunks: [], isRecording: false });
 
     client.on('message', (raw) => {
       void this.handleMessage(client, raw);
@@ -44,20 +52,29 @@ export class VoiceSessionGateway
   }
 
   handleDisconnect(client: WebSocket): void {
+    const session = this.sessions.get(client);
+    if (session) {
+      this.logger.log(
+        `Session ended: scenario=${session.scenarioId} turns=${session.turnCount} messages=${session.messages.length}`,
+      );
+    }
     this.sessions.delete(client);
     this.logger.log('WebSocket client disconnected');
   }
 
-  private getSession(client: WebSocket): ClientSession {
-    let session = this.sessions.get(client);
+  private getSession(client: WebSocket): SessionState {
+    const session = this.sessions.get(client);
     if (!session) {
-      session = { audioChunks: [], isRecording: false };
-      this.sessions.set(client, session);
+      throw new Error('Session not initialized — send session:connect first');
     }
     return session;
   }
 
-  private send(client: WebSocket, type: Parameters<typeof createServerEvent>[0], payload: Parameters<typeof createServerEvent>[1]): void {
+  private send(
+    client: WebSocket,
+    type: Parameters<typeof createServerEvent>[0],
+    payload: Parameters<typeof createServerEvent>[1],
+  ): void {
     client.send(JSON.stringify(createServerEvent(type, payload)));
   }
 
@@ -82,11 +99,15 @@ export class VoiceSessionGateway
     }
   }
 
-  private async dispatch(client: WebSocket, event: ClientWsEvent): Promise<void> {
+  private async dispatch(
+    client: WebSocket,
+    event: ClientWsEvent,
+  ): Promise<void> {
     switch (event.type) {
       case WS_EVENTS.SESSION_CONNECT:
-        this.logger.log(
-          `Session connect${event.payload.scenarioId ? `: ${event.payload.scenarioId}` : ''}`,
+        await this.handleSessionConnect(
+          client,
+          event.payload.scenarioId ?? 'interview',
         );
         break;
       case WS_EVENTS.SESSION_PING:
@@ -111,8 +132,50 @@ export class VoiceSessionGateway
     }
   }
 
+  private async handleSessionConnect(
+    client: WebSocket,
+    scenarioId: string,
+  ): Promise<void> {
+    try {
+      const scenario = this.scenarioService.getById(scenarioId);
+      const session: SessionState = {
+        scenarioId,
+        scenario,
+        messages: [{ role: 'assistant', content: scenario.openingLine }],
+        turnCount: 0,
+        audioChunks: [],
+        isRecording: false,
+        openingComplete: false,
+        isSpeaking: false,
+      };
+      this.sessions.set(client, session);
+
+      this.logger.log(
+        `Session connect: scenario=${scenarioId} opening="${scenario.openingLine}"`,
+      );
+
+      await this.playTts(client, scenario.openingLine);
+      session.openingComplete = true;
+    } catch (error) {
+      const message =
+        error instanceof NotFoundException
+          ? `Unknown scenario: ${scenarioId}`
+          : error instanceof Error
+            ? error.message
+            : 'Failed to start session';
+      this.logger.error(`Session connect failed: ${message}`);
+      this.send(client, WS_EVENTS.ERROR, {
+        code: 'SESSION_CONNECT_FAILED',
+        message,
+      });
+    }
+  }
+
   private handleAudioStart(client: WebSocket): void {
     const session = this.getSession(client);
+    if (!session.openingComplete || session.isSpeaking) {
+      return;
+    }
     session.audioChunks = [];
     session.isRecording = true;
     this.logger.log('Audio recording started');
@@ -120,7 +183,7 @@ export class VoiceSessionGateway
 
   private handleAudioChunk(client: WebSocket, data: string): void {
     const session = this.getSession(client);
-    if (!session.isRecording) {
+    if (!session.isRecording || !session.openingComplete || session.isSpeaking) {
       return;
     }
     session.audioChunks.push(Buffer.from(data, 'base64'));
@@ -129,6 +192,18 @@ export class VoiceSessionGateway
   private async handleAudioEnd(client: WebSocket): Promise<void> {
     const session = this.getSession(client);
     session.isRecording = false;
+
+    if (!session.openingComplete) {
+      this.send(client, WS_EVENTS.ERROR, {
+        code: 'OPENING_IN_PROGRESS',
+        message: '请等待面试官说完开场白后再发言',
+      });
+      return;
+    }
+
+    if (session.isSpeaking) {
+      return;
+    }
 
     if (session.audioChunks.length === 0) {
       this.send(client, WS_EVENTS.ERROR, {
@@ -165,7 +240,14 @@ export class VoiceSessionGateway
         utteranceId,
       });
 
-      await this.runLlmAndTts(client, result.final);
+      session.messages.push({ role: 'user', content: result.final });
+      session.turnCount += 1;
+
+      this.logger.log(
+        `Turn ${session.turnCount}: user="${result.final}" history=${session.messages.length} messages`,
+      );
+
+      await this.runLlmAndTts(client, session);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'ASR transcription failed';
@@ -177,22 +259,35 @@ export class VoiceSessionGateway
     }
   }
 
-  private async runLlmAndTts(client: WebSocket, userText: string): Promise<void> {
+  private async runLlmAndTts(
+    client: WebSocket,
+    session: SessionState,
+  ): Promise<void> {
     try {
-      const llmResponse = await this.llmService.generateReply(userText);
-      this.logger.log(`LLM reply (${llmResponse.reply.length} chars)`);
-
-      this.send(client, WS_EVENTS.SESSION_PHASE, { phase: 'speaking' });
-      this.send(client, WS_EVENTS.TTS_START, { reply: llmResponse.reply });
-
-      await this.ttsService.synthesize(llmResponse.reply, (chunk) => {
-        this.send(client, WS_EVENTS.TTS_CHUNK, {
-          data: chunk.toString('base64'),
-        });
+      const llmResponse = await this.llmService.generateReply(
+        session.messages,
+        session.scenario,
+      );
+      session.messages.push({
+        role: 'assistant',
+        content: llmResponse.reply,
       });
 
-      this.send(client, WS_EVENTS.TTS_END, {});
+      this.logger.log(
+        `LLM reply turn ${session.turnCount} (${llmResponse.reply.length} chars)`,
+      );
+
+      await this.playTts(client, llmResponse.reply);
     } catch (error) {
+      const lastMessage = session.messages.at(-1);
+      if (lastMessage?.role === 'user') {
+        session.messages.pop();
+        session.turnCount = Math.max(0, session.turnCount - 1);
+        this.logger.warn(
+          `Rolled back failed turn; history=${session.messages.length} messages`,
+        );
+      }
+
       const message =
         error instanceof Error ? error.message : 'LLM/TTS pipeline failed';
       this.logger.error(`LLM/TTS failed: ${message}`);
@@ -200,6 +295,26 @@ export class VoiceSessionGateway
         code: 'PIPELINE_FAILED',
         message,
       });
+    }
+  }
+
+  private async playTts(client: WebSocket, reply: string): Promise<void> {
+    const session = this.getSession(client);
+    session.isSpeaking = true;
+
+    try {
+      this.send(client, WS_EVENTS.SESSION_PHASE, { phase: 'speaking' });
+      this.send(client, WS_EVENTS.TTS_START, { reply });
+
+      await this.ttsService.synthesize(reply, (chunk) => {
+        this.send(client, WS_EVENTS.TTS_CHUNK, {
+          data: chunk.toString('base64'),
+        });
+      });
+
+      this.send(client, WS_EVENTS.TTS_END, {});
+    } finally {
+      session.isSpeaking = false;
     }
   }
 }

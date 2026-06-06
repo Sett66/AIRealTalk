@@ -1,27 +1,21 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios, { isAxiosError } from 'axios';
-import type { LlmTurnResponse } from '@airealtalk/shared';
-import { LlmService } from './llm.service';
+import type { LlmTurnResponse, Scenario } from '@airealtalk/shared';
+import { LlmService, type ChatMessage } from './llm.service';
 import { fallbackLlmResponse, parseLlmResponse } from './llm-response.parser';
-
-const SYSTEM_PROMPT = `You are a friendly English conversation partner for B1-B2 learners practicing spoken English.
-Respond naturally in English with 1-3 short sentences. Be encouraging.
-Output JSON only with this exact shape:
-{
-  "reply": "your spoken English response",
-  "hints": [],
-  "corrections": []
-}
-Always return an empty hints array and empty corrections array for now.`;
 
 interface DeepSeekChatResponse {
   choices?: Array<{
     message?: {
-      content?: string;
+      content?: string | null;
+      reasoning_content?: string | null;
     };
+    finish_reason?: string;
   }>;
 }
+
+const MAX_ATTEMPTS = 3;
 
 @Injectable()
 export class DeepSeekLlmService extends LlmService {
@@ -31,25 +25,57 @@ export class DeepSeekLlmService extends LlmService {
     super();
   }
 
-  async generateReply(userText: string): Promise<LlmTurnResponse> {
-    let raw = await this.callApi(userText, false);
-    let parsed = parseLlmResponse(raw);
-    if (parsed) {
-      return parsed;
+  async generateReply(
+    messages: ChatMessage[],
+    scenario: Scenario,
+  ): Promise<LlmTurnResponse> {
+    let lastRaw = '';
+
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
+      const isRetry = attempt > 0;
+      const useJsonFormat = attempt < 2;
+
+      const raw = await this.callApi(
+        messages,
+        scenario,
+        isRetry,
+        useJsonFormat,
+      );
+
+      if (!raw) {
+        this.logger.warn(
+          `DeepSeek empty response on attempt ${attempt + 1}/${MAX_ATTEMPTS}`,
+        );
+        continue;
+      }
+
+      lastRaw = raw;
+      const parsed = parseLlmResponse(raw);
+      if (parsed) {
+        return parsed;
+      }
+
+      this.logger.warn(
+        `DeepSeek JSON parse failed on attempt ${attempt + 1}/${MAX_ATTEMPTS}`,
+      );
     }
 
-    this.logger.warn('DeepSeek JSON parse failed, retrying once');
-    raw = await this.callApi(userText, true);
-    parsed = parseLlmResponse(raw);
-    if (parsed) {
-      return parsed;
+    if (lastRaw) {
+      this.logger.warn('DeepSeek using fallback after retries');
+      return fallbackLlmResponse(lastRaw);
     }
 
-    this.logger.warn('DeepSeek JSON parse failed after retry, using fallback');
-    return fallbackLlmResponse(raw);
+    throw new Error(
+      'DeepSeek 连续返回空回复，请稍后重试（json_object 模式已知偶发问题）',
+    );
   }
 
-  private async callApi(userText: string, isRetry: boolean): Promise<string> {
+  private async callApi(
+    messages: ChatMessage[],
+    scenario: Scenario,
+    isRetry: boolean,
+    useJsonFormat: boolean,
+  ): Promise<string | null> {
     const apiKey = this.config.get<string>('DEEPSEEK_API_KEY');
     const baseUrl =
       this.config.get<string>('DEEPSEEK_BASE_URL') ??
@@ -59,9 +85,11 @@ export class DeepSeekLlmService extends LlmService {
       throw new Error('DEEPSEEK_API_KEY is required');
     }
 
-    const systemContent = isRetry
-      ? `${SYSTEM_PROMPT}\nIMPORTANT: Your previous response was not valid JSON. Respond with valid JSON only.`
-      : SYSTEM_PROMPT;
+    let systemContent = this.buildSystemPrompt(scenario);
+    if (isRetry) {
+      systemContent +=
+        '\nIMPORTANT: Your previous response was invalid or empty. Respond with valid JSON only.';
+    }
 
     try {
       const response = await axios.post<DeepSeekChatResponse>(
@@ -70,10 +98,16 @@ export class DeepSeekLlmService extends LlmService {
           model: 'deepseek-chat',
           messages: [
             { role: 'system', content: systemContent },
-            { role: 'user', content: userText },
+            ...messages.map((message) => ({
+              role: message.role,
+              content: message.content,
+            })),
           ],
-          response_format: { type: 'json_object' },
+          ...(useJsonFormat
+            ? { response_format: { type: 'json_object' as const } }
+            : {}),
           temperature: 0.7,
+          max_tokens: 1024,
         },
         {
           headers: {
@@ -84,9 +118,14 @@ export class DeepSeekLlmService extends LlmService {
         },
       );
 
-      const content = response.data.choices?.[0]?.message?.content?.trim();
+      const choice = response.data.choices?.[0];
+      const content = choice?.message?.content?.trim();
+
       if (!content) {
-        throw new Error('DeepSeek returned empty response');
+        this.logger.warn(
+          `DeepSeek empty content (finish_reason=${choice?.finish_reason ?? 'unknown'}, json_format=${useJsonFormat})`,
+        );
+        return null;
       }
 
       return content;

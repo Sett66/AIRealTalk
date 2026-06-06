@@ -1,20 +1,33 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { LlmTurnResponse } from '@airealtalk/shared';
-import { LlmService } from './llm.service';
+import type { LlmTurnResponse, Scenario } from '@airealtalk/shared';
+import { LlmService, type ChatMessage } from './llm.service';
 
-const MOCK_REPLY =
-  "Sure! One coffee coming right up. Would you like milk or sugar with that?";
+const INTERVIEW_REPLIES = [
+  "That's interesting. What motivated you to apply for this position?",
+  'Can you describe a challenging situation you handled at work or school?',
+  'How do you handle working under pressure or tight deadlines?',
+  'Do you have any questions for me about the role or our team?',
+];
 
 @Injectable()
 export class MockLlmService extends LlmService {
   private readonly logger = new Logger(MockLlmService.name);
 
-  async generateReply(userText: string): Promise<LlmTurnResponse> {
-    this.logger.log(`Mock LLM reply for: "${userText}"`);
+  async generateReply(
+    messages: ChatMessage[],
+    scenario: Scenario,
+  ): Promise<LlmTurnResponse> {
+    const userTurns = messages.filter((message) => message.role === 'user').length;
+    const replyIndex = Math.min(userTurns - 1, INTERVIEW_REPLIES.length - 1);
+    const reply = INTERVIEW_REPLIES[Math.max(0, replyIndex)];
+
+    this.logger.log(
+      `Mock LLM reply for scenario "${scenario.id}" turn ${userTurns}: "${reply}"`,
+    );
     await new Promise((resolve) => setTimeout(resolve, 200));
 
     return {
-      reply: MOCK_REPLY,
+      reply,
       hints: [],
       corrections: [],
     };
