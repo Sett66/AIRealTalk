@@ -13,6 +13,8 @@ import {
   type ClientWsEvent,
 } from '@airealtalk/shared';
 import { AsrService } from './asr/asr.service';
+import { LlmService } from './llm/llm.service';
+import { TtsService } from './tts/tts.service';
 
 interface ClientSession {
   audioChunks: Buffer[];
@@ -26,7 +28,11 @@ export class VoiceSessionGateway
   private readonly logger = new Logger(VoiceSessionGateway.name);
   private readonly sessions = new WeakMap<WebSocket, ClientSession>();
 
-  constructor(private readonly asrService: AsrService) {}
+  constructor(
+    private readonly asrService: AsrService,
+    private readonly llmService: LlmService,
+    private readonly ttsService: TtsService,
+  ) {}
 
   handleConnection(client: WebSocket): void {
     this.logger.log('WebSocket client connected');
@@ -153,16 +159,45 @@ export class VoiceSessionGateway
         return;
       }
 
+      const utteranceId = randomUUID();
       this.send(client, WS_EVENTS.ASR_FINAL, {
         text: result.final,
-        utteranceId: randomUUID(),
+        utteranceId,
       });
+
+      await this.runLlmAndTts(client, result.final);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'ASR transcription failed';
       this.logger.error(`ASR failed: ${message}`);
       this.send(client, WS_EVENTS.ERROR, {
         code: 'ASR_FAILED',
+        message,
+      });
+    }
+  }
+
+  private async runLlmAndTts(client: WebSocket, userText: string): Promise<void> {
+    try {
+      const llmResponse = await this.llmService.generateReply(userText);
+      this.logger.log(`LLM reply (${llmResponse.reply.length} chars)`);
+
+      this.send(client, WS_EVENTS.SESSION_PHASE, { phase: 'speaking' });
+      this.send(client, WS_EVENTS.TTS_START, { reply: llmResponse.reply });
+
+      await this.ttsService.synthesize(llmResponse.reply, (chunk) => {
+        this.send(client, WS_EVENTS.TTS_CHUNK, {
+          data: chunk.toString('base64'),
+        });
+      });
+
+      this.send(client, WS_EVENTS.TTS_END, {});
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'LLM/TTS pipeline failed';
+      this.logger.error(`LLM/TTS failed: ${message}`);
+      this.send(client, WS_EVENTS.ERROR, {
+        code: 'PIPELINE_FAILED',
         message,
       });
     }

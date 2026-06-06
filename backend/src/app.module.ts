@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AsrModule } from './asr/asr.module';
+import { LlmModule } from './llm/llm.module';
+import { TtsModule } from './tts/tts.module';
 import { HealthController } from './health.controller';
 import { VoiceSessionGateway } from './voice-session.gateway';
 
@@ -11,6 +13,8 @@ import { VoiceSessionGateway } from './voice-session.gateway';
       envFilePath: '.env',
     }),
     AsrModule,
+    LlmModule,
+    TtsModule,
   ],
   controllers: [HealthController],
   providers: [VoiceSessionGateway],
