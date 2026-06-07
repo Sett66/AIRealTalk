@@ -8,13 +8,13 @@
 
 ## 验收标准
 
-- [ ] 报告页显示发音均分（0-100）与逐句分数
-- [ ] `PronunciationModule` 通过 backend 代理，密钥不在 mobile
-- [ ] 每次练习结束自动保存 PracticeSummary 到本地
-- [ ] HistoryScreen 展示历史列表（场景名、日期、分数、轮次）
-- [ ] 完成 ≥ 3 次练习后，趋势折线图可见
-- [ ] App 重启后历史数据仍在
-- [ ] 支持 mock 发音评测模式
+- [x] 报告页显示发音均分（0-100）与逐句分数
+- [x] `PronunciationModule` 通过 backend 代理，密钥不在 mobile
+- [x] 每次练习结束自动保存 PracticeSummary 到本地
+- [x] HistoryScreen 展示历史列表（场景名、日期、分数、轮次）
+- [x] 完成 ≥ 3 次练习后，趋势折线图可见
+- [x] App 重启后历史数据仍在
+- [x] 支持 mock 发音评测模式
 
 ## 阻塞关系
 

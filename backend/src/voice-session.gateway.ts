@@ -18,6 +18,8 @@ import { AsrService } from './asr/asr.service';
 import { mergeInConversationHints } from './llm/hint.utils';
 import { LlmService, type ChatMessage } from './llm/llm.service';
 import { countWords, pcmDurationSec } from './report/report-metrics';
+import { PronunciationService } from './pronunciation/pronunciation.service';
+import type { TurnAudio } from './pronunciation/pronunciation.types';
 import { ReportService } from './report/report.service';
 import { ScenarioService } from './scenario/scenario.service';
 import { TtsService } from './tts/tts.service';
@@ -31,6 +33,7 @@ interface SessionState {
   userSpeakingDurationSec: number;
   userWordCount: number;
   turnCorrections: LlmCorrection[];
+  turnAudios: TurnAudio[];
   audioChunks: Buffer[];
   isRecording: boolean;
   openingComplete: boolean;
@@ -48,6 +51,7 @@ export class VoiceSessionGateway
     private readonly asrService: AsrService,
     private readonly llmService: LlmService,
     private readonly reportService: ReportService,
+    private readonly pronunciationService: PronunciationService,
     private readonly ttsService: TtsService,
     private readonly scenarioService: ScenarioService,
   ) {}
@@ -156,6 +160,7 @@ export class VoiceSessionGateway
         userSpeakingDurationSec: 0,
         userWordCount: 0,
         turnCorrections: [],
+        turnAudios: [],
         audioChunks: [],
         isRecording: false,
         openingComplete: false,
@@ -257,6 +262,7 @@ export class VoiceSessionGateway
       session.messages.push({ role: 'user', content: result.final });
       session.userWordCount += countWords(result.final);
       session.turnCount += 1;
+      session.turnAudios.push({ text: result.final, pcm: pcmBuffer });
 
       this.logger.log(
         `Turn ${session.turnCount}: user="${result.final}" history=${session.messages.length} messages`,
@@ -363,7 +369,30 @@ export class VoiceSessionGateway
         accumulatedCorrections: session.turnCorrections,
       });
 
-      this.send(client, WS_EVENTS.REPORT_READY, { report });
+      let enrichedReport = report;
+      try {
+        const pronunciation = await this.pronunciationService.evaluateSession(
+          session.turnAudios,
+        );
+        enrichedReport = {
+          ...report,
+          pronunciationAvg: pronunciation.pronunciationAvg,
+          sentenceScores: pronunciation.sentenceScores,
+        };
+        this.logger.log(
+          `Pronunciation ready avg=${pronunciation.pronunciationAvg}`,
+        );
+      } catch (pronunciationError) {
+        const message =
+          pronunciationError instanceof Error
+            ? pronunciationError.message
+            : 'Pronunciation evaluation failed';
+        this.logger.warn(
+          `Pronunciation skipped for session=${session.sessionId}: ${message}`,
+        );
+      }
+
+      this.send(client, WS_EVENTS.REPORT_READY, { report: enrichedReport });
       this.logger.log(`Report ready for session=${session.sessionId}`);
     } catch (error) {
       const message =

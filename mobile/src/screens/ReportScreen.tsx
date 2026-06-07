@@ -20,6 +20,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 type ReportScreenProps = {
   report: SessionReport;
   scenarioTitle: string;
+  doneLabel?: string;
   onDone: () => void;
 };
 
@@ -36,6 +37,7 @@ function formatDuration(durationSec: number): string {
 export function ReportScreen({
   report,
   scenarioTitle,
+  doneLabel = '返回场景选择',
   onDone,
 }: ReportScreenProps) {
   return (
@@ -57,7 +59,26 @@ export function ReportScreen({
             label="目标覆盖"
             value={`${report.goalCoverage}%`}
           />
+          {report.pronunciationAvg !== undefined && (
+            <StatCard
+              label="发音均分"
+              value={String(report.pronunciationAvg)}
+            />
+          )}
         </View>
+
+        {report.sentenceScores && report.sentenceScores.length > 0 && (
+          <Section title="逐句发音评分">
+            {report.sentenceScores.map((item, index) => (
+              <View key={`${index}-${item.text}`} style={styles.sentenceRow}>
+                <Text style={styles.sentenceText} numberOfLines={2}>
+                  {item.text}
+                </Text>
+                <Text style={styles.sentenceScore}>{item.score}</Text>
+              </View>
+            ))}
+          </Section>
+        )}
 
         <Section title="语法问题分类">
           {report.grammarIssues.length === 0 ? (
@@ -94,7 +115,7 @@ export function ReportScreen({
       </ScrollView>
 
       <Pressable style={styles.doneButton} onPress={onDone}>
-        <Text style={styles.doneButtonText}>返回场景选择</Text>
+        <Text style={styles.doneButtonText}>{doneLabel}</Text>
       </Pressable>
     </ScreenContainer>
   );
@@ -256,6 +277,31 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#16a34a',
     lineHeight: 21,
+  },
+  sentenceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  sentenceText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#334155',
+    lineHeight: 20,
+  },
+  sentenceScore: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#2563eb',
+    minWidth: 36,
+    textAlign: 'right',
   },
   doneButton: {
     backgroundColor: '#2563eb',
