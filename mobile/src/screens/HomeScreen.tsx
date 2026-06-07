@@ -50,7 +50,7 @@ export function HomeScreen({ onStartPractice, onOpenHistory }: HomeScreenProps) 
   return (
     <ScreenContainer style={styles.container}>
       <Text style={styles.title}>AIRealTalk</Text>
-      <Text style={styles.subtitle}>英语口语练习 · Issue #09</Text>
+      <Text style={styles.subtitle}>AI 沉浸式英语口语对练</Text>
 
       <View style={styles.card}>
         <Text style={styles.cardLabel}>Backend 健康检查</Text>

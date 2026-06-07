@@ -63,7 +63,7 @@ export function SceneSelectScreen({
           <Text style={styles.backText}>← 返回</Text>
         </Pressable>
         <Text style={styles.title}>选择场景</Text>
-        <Text style={styles.subtitle}>Issue #06 · 三种练习场景</Text>
+        <Text style={styles.subtitle}>面试 · 点餐 · 会议</Text>
       </View>
 
       {state === 'loading' && (
