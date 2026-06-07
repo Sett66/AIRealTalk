@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import axios from 'axios';
+import axios, { isAxiosError } from 'axios';
 import { AsrService } from './asr.service';
 import type { AsrTranscriptionResult } from './asr.types';
 import { AliyunTokenService } from './aliyun-token.service';
@@ -50,48 +50,55 @@ export class AliyunAsrService extends AsrService {
       `Aliyun ASR transcribing ${audioBuffer.length} bytes (${format}, source=${isWav ? 'wav' : 'pcm'})`,
     );
 
-    const response = await axios.post(NLS_ASR_URL, body, {
-      headers: {
-        'X-NLS-Token': token,
-        'Content-Type': 'application/octet-stream',
-        'Content-Length': String(body.length),
-      },
-      params: {
-        appkey: appKey,
-        format,
-        sample_rate: 16000,
-        enable_punctuation_prediction: true,
-        enable_inverse_text_normalization: true,
-      },
-      timeout: 15_000,
-      maxBodyLength: Infinity,
-      responseType: 'json',
-      transformResponse: [(raw) => raw],
-    });
+    try {
+      const response = await axios.post(NLS_ASR_URL, body, {
+        headers: {
+          'X-NLS-Token': token,
+          'Content-Type': 'application/octet-stream',
+          'Content-Length': String(body.length),
+        },
+        params: {
+          appkey: appKey,
+          format,
+          sample_rate: 16000,
+          enable_punctuation_prediction: true,
+          enable_inverse_text_normalization: true,
+        },
+        timeout: 15_000,
+        maxBodyLength: Infinity,
+        responseType: 'json',
+        transformResponse: [(raw) => raw],
+      });
 
-    const parsed = parseAsrResponse(response.data);
-    const status = parsed.status;
+      const parsed = parseAsrResponse(response.data);
+      const status = parsed.status;
 
-    this.logger.log(
-      `Aliyun ASR response status=${String(status)} resultLen=${parsed.result?.length ?? 0} message=${parsed.message ?? ''}`,
-    );
-
-    if (status !== 20000000) {
-      throw new Error(
-        parsed.message ?? `Aliyun ASR failed with status ${String(status)}`,
+      this.logger.log(
+        `Aliyun ASR response status=${String(status)} resultLen=${parsed.result?.length ?? 0} message=${parsed.message ?? ''}`,
       );
-    }
 
-    const final = parsed.result?.trim() ?? '';
-    if (!final) {
-      throw new Error(
-        'Aliyun ASR returned empty result — check audio format or speak louder',
-      );
-    }
+      if (status !== 20000000) {
+        throw new Error(
+          parsed.message ?? `Aliyun ASR failed with status ${String(status)}`,
+        );
+      }
 
-    return {
-      partials: [final],
-      final,
-    };
+      const final = parsed.result?.trim() ?? '';
+      if (!final) {
+        throw new Error(
+          'Aliyun ASR returned empty result — check audio format or speak louder',
+        );
+      }
+
+      return {
+        partials: [final],
+        final,
+      };
+    } catch (error) {
+      if (isAxiosError(error) && error.code === 'ECONNABORTED') {
+        throw new Error('语音识别超时（15 秒），请检查网络后重试');
+      }
+      throw error;
+    }
   }
 }

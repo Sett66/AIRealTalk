@@ -29,17 +29,26 @@ Use "hints": [] when the user's English is grammatically complete and clear, eve
 
 Corrections: record grammar/expression fixes for the post-session report; category is one of tense, preposition, collocation, expression, other.`;
 
+const B1_B2_GUIDANCE = `Learner level guidance (B1–B2):
+- Use clear, natural spoken English. Prefer common words over rare vocabulary.
+- Keep sentences short (1–3 sentences). One idea per sentence when possible.
+- If the learner struggles, rephrase your question more simply — do NOT switch to Chinese.
+- Be warm and encouraging. Acknowledge good attempts before asking follow-ups.
+- Adjust follow-up difficulty to match their last answer length and grammar complexity.`;
+
 export abstract class LlmService {
   buildSystemPrompt(scenario: Scenario): string {
     const goalsList = scenario.goals.map((goal) => `- ${goal}`).join('\n');
 
     return `You are ${scenario.role}.
-This is an English speaking practice session for ${scenario.difficulty} level learners.
+This is an English speaking practice session for ${scenario.difficulty} level learners (CEFR B1–B2).
 
 Session goals:
 ${goalsList}
 
 Stay in character throughout the conversation. Respond naturally in English with 1-3 short sentences. Be encouraging and appropriate for ${scenario.difficulty} learners.
+
+${B1_B2_GUIDANCE}
 
 ${JSON_OUTPUT_INSTRUCTION}`;
   }

@@ -13,6 +13,7 @@ import {
 } from '@airealtalk/shared';
 import { AudioWave } from '../components/AudioWave';
 import { HintBubble, type HintEntry } from '../components/HintBubble';
+import { MicPermissionGuide } from '../components/MicPermissionGuide';
 import { PhaseIndicator } from '../components/PhaseIndicator';
 import { ScreenContainer } from '../components/ScreenContainer';
 import { useAudioRecorder } from '../hooks/useAudioRecorder';
@@ -33,6 +34,14 @@ type ConversationScreenProps = {
   onReportReady: (report: SessionReport) => void;
 };
 
+const PROCESSING_TIMEOUT_MS = 35_000;
+const RETRYABLE_ERROR_CODES = new Set([
+  'ASR_FAILED',
+  'ASR_EMPTY',
+  'PIPELINE_FAILED',
+  'PROCESSING_TIMEOUT',
+]);
+
 export function ConversationScreen({
   scenarioId,
   scenarioTitle,
@@ -42,6 +51,7 @@ export function ConversationScreen({
   const [transcripts, setTranscripts] = useState<TranscriptEntry[]>([]);
   const [partialText, setPartialText] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [lastErrorCode, setLastErrorCode] = useState<string | null>(null);
   const [reportError, setReportError] = useState<string | null>(null);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const [hints, setHints] = useState<HintEntry[]>([]);
@@ -73,13 +83,15 @@ export function ConversationScreen({
     },
   });
 
-  const { status, sendEvent } = useWebSocket({
+  const { status, reconnectAttempt, reconnectExhausted, reconnect, sendEvent } =
+    useWebSocket({
     scenarioId,
     onServerEvent: (event: ServerWsEvent) => {
       switch (event.type) {
         case WS_EVENTS.ASR_PARTIAL:
           setPartialText(event.payload.text);
           setErrorMessage(null);
+          setLastErrorCode(null);
           break;
         case WS_EVENTS.ASR_FINAL: {
           setPartialText(null);
@@ -140,6 +152,7 @@ export function ConversationScreen({
             break;
           }
           setErrorMessage(event.payload.message);
+          setLastErrorCode(event.payload.code);
           resetPhase();
           resetToIdleRef.current();
           break;
@@ -169,11 +182,37 @@ export function ConversationScreen({
     setSpeakingRef.current = setSpeaking;
   }, [resetToIdle, setSpeaking]);
 
+  useEffect(() => {
+    if (phase !== 'processing') {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setErrorMessage('处理超时，请检查网络后按住按钮重试');
+      setLastErrorCode('PROCESSING_TIMEOUT');
+      resetPhase();
+      resetToIdleRef.current();
+    }, PROCESSING_TIMEOUT_MS);
+
+    return () => clearTimeout(timer);
+  }, [phase, resetPhase]);
+
+  const micDenied =
+    permission === 'denied' || permission === 'blocked';
+
   const wsColor =
     status === 'connected' ? '#16a34a' : status === 'connecting' ? '#ca8a04' : '#dc2626';
 
   const wsLabel =
-    status === 'connected' ? '已连接' : status === 'connecting' ? '连接中' : '已断开';
+    reconnectExhausted
+      ? '连接失败'
+      : status === 'connected'
+        ? '已连接'
+        : status === 'connecting' && reconnectAttempt > 0
+          ? `重连中 (${reconnectAttempt}/5)`
+          : status === 'connecting'
+            ? '连接中'
+            : '已断开';
 
   const isBusy = phase === 'processing' || phase === 'speaking';
   const isListening = phase === 'listening';
@@ -196,6 +235,16 @@ export function ConversationScreen({
       setReportError('连接已断开，请检查后重试');
     }
   }, [isBusy, isGeneratingReport, sendEvent, status]);
+
+  const handleRetryTurn = useCallback(() => {
+    setErrorMessage(null);
+    setLastErrorCode(null);
+    resetPhase();
+    resetToIdle();
+  }, [resetPhase, resetToIdle]);
+
+  const canRetryTurn =
+    lastErrorCode !== null && RETRYABLE_ERROR_CODES.has(lastErrorCode);
 
   const handleRetryReport = useCallback(() => {
     handleEndPractice();
@@ -249,10 +298,28 @@ export function ConversationScreen({
 
       <HintBubble
         hints={hints}
-        visible={hints.length > 0}
+        visible={hints.length > 0 && !micDenied}
         onDismiss={() => setHints([])}
       />
 
+      {reconnectExhausted && (
+        <View style={styles.reconnectBanner}>
+          <Text style={styles.reconnectText}>
+            无法连接服务器，已自动重试 5 次。请确认 backend 已启动且网络正常。
+          </Text>
+          <Pressable style={styles.retryButton} onPress={reconnect}>
+            <Text style={styles.retryButtonText}>手动重连</Text>
+          </Pressable>
+        </View>
+      )}
+
+      {micDenied && nativeAvailable ? (
+        <MicPermissionGuide
+          blocked={permission === 'blocked'}
+          onRetry={() => void requestPermission()}
+        />
+      ) : (
+        <>
       <ScrollView style={styles.transcriptArea} contentContainerStyle={styles.transcriptContent}>
         {transcripts.length === 0 && !partialText && (
           <Text style={styles.placeholder}>
@@ -289,6 +356,8 @@ export function ConversationScreen({
           <AudioWave active />
         </View>
       )}
+        </>
+      )}
 
       {!nativeAvailable && (
         <View style={styles.permissionBanner}>
@@ -298,20 +367,14 @@ export function ConversationScreen({
         </View>
       )}
 
-      {permission === 'denied' && (
-        <View style={styles.permissionBanner}>
-          <Text style={styles.permissionText}>
-            需要麦克风权限才能录音。请在系统设置中允许麦克风访问。
-          </Text>
-          <Pressable style={styles.permissionButton} onPress={() => void requestPermission()}>
-            <Text style={styles.permissionButtonText}>重新申请权限</Text>
-          </Pressable>
-        </View>
-      )}
-
       {errorMessage && (
         <View style={styles.errorBanner}>
           <Text style={styles.errorText}>{errorMessage}</Text>
+          {canRetryTurn && (
+            <Pressable style={styles.retryButton} onPress={handleRetryTurn}>
+              <Text style={styles.retryButtonText}>重试</Text>
+            </Pressable>
+          )}
         </View>
       )}
 
@@ -334,10 +397,20 @@ export function ConversationScreen({
         style={[
           styles.pttButton,
           isListening && styles.pttButtonActive,
-          (status !== 'connected' || isBusy || !nativeAvailable) &&
+          (status !== 'connected' ||
+            isBusy ||
+            !nativeAvailable ||
+            micDenied ||
+            reconnectExhausted) &&
             styles.pttButtonDisabled,
         ]}
-        disabled={status !== 'connected' || isBusy || !nativeAvailable}
+        disabled={
+          status !== 'connected' ||
+          isBusy ||
+          !nativeAvailable ||
+          micDenied ||
+          reconnectExhausted
+        }
         onPressIn={() => void startRecording()}
         onPressOut={() => void stopRecording()}
       >
@@ -529,6 +602,21 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 12,
     marginBottom: 12,
+    gap: 10,
+  },
+  reconnectBanner: {
+    backgroundColor: '#fef3c7',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 12,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: '#fde68a',
+  },
+  reconnectText: {
+    color: '#92400e',
+    fontSize: 13,
+    lineHeight: 20,
   },
   errorText: {
     color: '#dc2626',

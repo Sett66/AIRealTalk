@@ -1,6 +1,10 @@
 import { PermissionsAndroid, Platform } from 'react-native';
 
-export type MicPermissionStatus = 'granted' | 'denied' | 'unavailable';
+export type MicPermissionStatus =
+  | 'granted'
+  | 'denied'
+  | 'blocked'
+  | 'unavailable';
 
 export async function requestMicPermission(): Promise<MicPermissionStatus> {
   if (Platform.OS !== 'android') {
@@ -26,6 +30,10 @@ export async function requestMicPermission(): Promise<MicPermissionStatus> {
 
   if (result === PermissionsAndroid.RESULTS.GRANTED) {
     return 'granted';
+  }
+
+  if (result === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN) {
+    return 'blocked';
   }
 
   return 'denied';
