@@ -114,7 +114,7 @@ export class DeepSeekLlmService extends LlmService {
             Authorization: `Bearer ${apiKey.trim()}`,
             'Content-Type': 'application/json',
           },
-          timeout: 15_000,
+          timeout: 20_000,
         },
       );
 
@@ -131,6 +131,10 @@ export class DeepSeekLlmService extends LlmService {
       return content;
     } catch (error) {
       if (isAxiosError(error)) {
+        if (error.code === 'ECONNABORTED') {
+          throw new Error('AI 回复生成超时（20 秒），请检查网络后重试');
+        }
+
         const status = error.response?.status;
         const apiMessage =
           typeof error.response?.data === 'object' &&

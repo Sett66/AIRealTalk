@@ -78,6 +78,61 @@ USE_MOCK_PRONUNCIATION=true   # 默认 true；真实 ssapi 评测待后续接入
 
 验证 Issue #09：`node scripts/verify-issue-09.mjs`（需 backend mock 三件套 + `USE_MOCK_PRONUNCIATION=true`）
 
+验证 Issue #10 稳定性项：`node scripts/verify-issue-10.mjs`（静态检查：无密钥泄露、重连/超时配置）
+
+### 首次本地启动（完整步骤）
+
+1. **克隆与依赖**
+   ```bash
+   git clone https://github.com/Sett66/AIRealTalk.git
+   cd AIRealTalk
+   pnpm install
+   ```
+
+2. **Backend 环境变量**
+   ```bash
+   cp backend/.env.example backend/.env
+   # 编辑 backend/.env，填入阿里云 NLS 与 DeepSeek Key
+   # 无云凭证时可全部设为 mock：
+   # USE_MOCK_ASR=true USE_MOCK_LLM=true USE_MOCK_TTS=true USE_MOCK_PRONUNCIATION=true
+   ```
+
+3. **启动 Backend**（终端 1）
+   ```bash
+   pnpm dev:backend
+   # 验证：curl http://localhost:3000/health 应返回 ok
+   ```
+
+4. **启动 Metro**（终端 2）
+   ```bash
+   pnpm dev:mobile
+   ```
+
+5. **构建并安装 App**（终端 3）
+   ```bash
+   pnpm android
+   # 首次构建较慢，需 Android Studio + JDK 17
+   ```
+
+6. **网络配置**
+   - **模拟器**：默认 `10.0.2.2:3000`，无需改配置
+   - **真机**：将 `mobile/src/config.ts` 中 `DEV_HOST` 改为电脑局域网 IP，确保手机与电脑同一 Wi-Fi
+
+7. **验收流程**
+   - 选择任一场景，完成 ≥5 轮按住说话对话
+   - 对话中出现轻提示且不阻断 TTS 播放
+   - 点击「结束练习」→ 查看报告（发音分 + 纠错 + 统计）
+   - 首页进入「练习历史」→ 确认记录与趋势图
+
+### 常见问题
+
+| 现象 | 排查 |
+|------|------|
+| App 显示「已断开」 | 确认 backend 已启动；真机检查 IP 配置 |
+| 录音无反应 | 授予麦克风权限；模拟器需在 Extended Controls 启用 Mic |
+| ASR/LLM 超时 | 检查网络；mock 模式下不应超时 |
+| 报告生成失败 | 至少完成 1 轮对话；backend 日志查看具体错误 |
+
 ### 常用命令
 
 ```bash
@@ -114,7 +169,7 @@ AIRealTalk/
 ## Agent 快速上手
 
 1. 阅读 [docs/SPEC.md](docs/SPEC.md)
-2. **Issue #10 待领取**，文档：[Issue #10 — 稳定性 + MVP 验收](docs/issues/issue-10.md)
+2. MVP 已交付；后续迭代见 SPEC 附录（全双工、VAD、iOS 等）
 3. 确认前置 Issue 已完成再领取任务
 4. **禁止** Expo、禁止 API Key 写入 mobile
 
@@ -126,7 +181,7 @@ AIRealTalk/
 
 ## 项目状态
 
-**当前进度**：Phase 5 待开始 — [Issue #10 稳定性 + MVP 验收](docs/issues/issue-10.md)
+**当前进度**：MVP 已交付 — [Issue #10 稳定性 + MVP 验收](docs/issues/issue-10.md) ✅
 
 | Issue | 状态 |
 |-------|------|
@@ -139,7 +194,7 @@ AIRealTalk/
 | [#07](docs/issues/issue-07.md) 对话中轻提示纠错 | ✅ |
 | [#08](docs/issues/issue-08.md) 课后详析报告 | ✅ |
 | [#09](docs/issues/issue-09.md) 发音评测 + 练习历史 | ✅（发音 mock，真实 ssapi 待后续） |
-| [#10](docs/issues/issue-10.md) 稳定性 + MVP 验收 | ⬜ |
+| [#10](docs/issues/issue-10.md) 稳定性 + MVP 验收 | ✅ |
 
 ## 许可证
 
