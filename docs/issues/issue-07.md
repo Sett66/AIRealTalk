@@ -4,16 +4,16 @@
 
 ## 要构建什么（端到端纵向切片）
 
-启用 LLM 结构化输出中的 **hints** 字段：当 `severity: major` 时，backend 发送 `hint:show` 事件，mobile 以 `HintBubble` 底部卡片展示简短提示。**不得打断或暂停 TTS 播放**；每轮最多 1 条 hint。
+启用 LLM 结构化输出中的 **hints** 字段：backend 发送 `hint:show` 事件，mobile 以 `HintBubble` 顶部卡片展示语言形式相关的简短提示（语法、残缺句、表达）。**不得打断或暂停 TTS 播放**。
 
 ## 验收标准
 
-- [ ] LLM prompt 约束：每轮 hints 最多 1 条，仅 major 级别
-- [ ] 故意说严重语法错误时，对话中出现轻提示
-- [ ] hint 显示期间 TTS 正常播放，无暂停/中断
-- [ ] `HintBubble` 底部滑入，3 秒自动收起，可手动关闭
-- [ ] minor 级别 hint 不展示（或仅写日志，不打扰用户）
-- [ ] `hint:show` 事件类型在 shared 包定义
+- [x] LLM prompt 约束：hint 仅覆盖语言形式（语法/残缺句/表达），禁止答题内容建议
+- [x] 故意说严重语法错误或残缺句时，对话中出现轻提示
+- [x] hint 显示期间 TTS 正常播放，无暂停/中断
+- [x] `HintBubble` 顶部滑入，8 秒自动收起，可手动关闭，支持多条 major/minor
+- [x] 内容型 hint（如「应谈兴趣而非工资」）被后端过滤，不展示
+- [x] `hint:show` 事件类型在 shared 包定义
 
 ## 阻塞关系
 
@@ -28,14 +28,15 @@
 
 ### 范围边界
 
-- **在范围内**：prompt 调优、hint 事件、HintBubble 组件
+- **在范围内**：prompt 调优、hint 事件、HintBubble 组件、残缺句规则检测、内容型 hint 过滤
 - **不在范围内**：课后详析报告、发音评测、历史趋势
 
 ### 验证步骤
 
-1. 说 "I go to store yesterday"，确认出现轻提示
-2. 同时确认 AI 语音回复正常播完
-3. 连续多轮对话，每轮 hint 不超过 1 条
+1. 说 "I go to store yesterday"，确认出现语法轻提示
+2. 说 "Most challenging. I am not good at."，确认出现残缺句提示
+3. 说完整语法句如 "Because salary is good."，确认不出现内容建议型 hint
+4. 同时确认 AI 语音回复正常播完
 
 ### 参考 SPEC 章节
 

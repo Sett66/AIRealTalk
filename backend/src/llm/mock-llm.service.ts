@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { LlmTurnResponse, Scenario } from '@airealtalk/shared';
+import type { LlmHint, LlmTurnResponse, Scenario } from '@airealtalk/shared';
+import { mergeInConversationHints } from './hint.utils';
 import { LlmService, type ChatMessage } from './llm.service';
 
 const MOCK_REPLIES: Record<string, string[]> = {
@@ -26,6 +27,37 @@ const MOCK_REPLIES: Record<string, string[]> = {
   ],
 };
 
+function detectGrammarHints(userText: string): LlmHint[] {
+  const hints: LlmHint[] = [];
+  const lower = userText.toLowerCase();
+
+  if (
+    /\b(go|goes|come|comes|do|does|is|are)\b/.test(lower) &&
+    /\byesterday\b/.test(lower)
+  ) {
+    hints.push({
+      severity: 'major',
+      message: 'Past tense needed — e.g. "went" for yesterday.',
+    });
+  }
+
+  if (/\bi (go|goes) to (?:the )?store\b/.test(lower)) {
+    hints.push({
+      severity: 'major',
+      message: 'Use past tense: "I went to the store yesterday."',
+    });
+  }
+
+  if (/\bvery a\b/i.test(userText)) {
+    hints.push({
+      severity: 'minor',
+      message: 'Use "a very" or "quite a", not "very a".',
+    });
+  }
+
+  return hints;
+}
+
 @Injectable()
 export class MockLlmService extends LlmService {
   private readonly logger = new Logger(MockLlmService.name);
@@ -37,17 +69,26 @@ export class MockLlmService extends LlmService {
     const replies =
       MOCK_REPLIES[scenario.id] ?? MOCK_REPLIES.interview;
     const userTurns = messages.filter((message) => message.role === 'user').length;
+    const lastUser = [...messages].reverse().find((message) => message.role === 'user');
     const replyIndex = Math.min(userTurns - 1, replies.length - 1);
     const reply = replies[Math.max(0, replyIndex)];
+    const hints = lastUser
+      ? mergeInConversationHints(
+          detectGrammarHints(lastUser.content),
+          lastUser.content,
+          this.logger,
+        )
+      : [];
 
     this.logger.log(
-      `Mock LLM reply for scenario "${scenario.id}" turn ${userTurns}: "${reply}"`,
+      `Mock LLM reply for scenario "${scenario.id}" turn ${userTurns}: "${reply}"` +
+        (hints.length > 0 ? ` hints=${hints.length}` : ''),
     );
     await new Promise((resolve) => setTimeout(resolve, 200));
 
     return {
       reply,
-      hints: [],
+      hints,
       corrections: [],
     };
   }

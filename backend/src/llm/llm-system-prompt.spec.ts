@@ -30,6 +30,9 @@ describe('LlmService.buildSystemPrompt', () => {
     expect(prompt).toContain('反问环节');
     expect(prompt).toContain('B1-B2');
     expect(prompt).toContain('"reply"');
+    expect(prompt).toContain('LANGUAGE FORM ONLY');
+    expect(prompt).toContain('incomplete/fragment sentences');
+    expect(prompt).toContain('STRICTLY FORBIDDEN in hints');
   });
 
   it('is shared by concrete LlmService implementations', () => {

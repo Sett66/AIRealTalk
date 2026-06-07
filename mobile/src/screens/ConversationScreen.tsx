@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { WS_EVENTS, type ServerWsEvent } from '@airealtalk/shared';
 import { AudioWave } from '../components/AudioWave';
+import { HintBubble, type HintEntry } from '../components/HintBubble';
 import { PhaseIndicator } from '../components/PhaseIndicator';
 import { ScreenContainer } from '../components/ScreenContainer';
 import { useAudioRecorder } from '../hooks/useAudioRecorder';
@@ -35,6 +36,7 @@ export function ConversationScreen({
   const [transcripts, setTranscripts] = useState<TranscriptEntry[]>([]);
   const [partialText, setPartialText] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [hints, setHints] = useState<HintEntry[]>([]);
   const phase = useSessionStore((state) => state.phase);
   const setPhase = useSessionStore((state) => state.setPhase);
   const resetPhase = useSessionStore((state) => state.resetPhase);
@@ -74,11 +76,21 @@ export function ConversationScreen({
         }
         case WS_EVENTS.SESSION_PHASE:
           if (event.payload.phase === 'processing') {
+            setHints([]);
             setPhase('processing');
           } else if (event.payload.phase === 'speaking') {
             setPhase('speaking');
             setSpeakingRef.current();
           }
+          break;
+        case WS_EVENTS.HINT_SHOW:
+          setHints((prev) => [
+            ...prev,
+            {
+              message: event.payload.message,
+              severity: event.payload.severity,
+            },
+          ]);
           break;
         case WS_EVENTS.TTS_START: {
           const reply = event.payload.reply.trim();
@@ -175,6 +187,12 @@ export function ConversationScreen({
           </View>
         </View>
       </View>
+
+      <HintBubble
+        hints={hints}
+        visible={hints.length > 0}
+        onDismiss={() => setHints([])}
+      />
 
       <ScrollView style={styles.transcriptArea} contentContainerStyle={styles.transcriptContent}>
         {transcripts.length === 0 && !partialText && (

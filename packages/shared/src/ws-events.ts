@@ -32,7 +32,7 @@ export type WsEventMap = {
   [WS_EVENTS.SESSION_PHASE]: { phase: 'processing' | 'speaking' };
   [WS_EVENTS.ASR_PARTIAL]: { text: string };
   [WS_EVENTS.ASR_FINAL]: { text: string; utteranceId: string };
-  [WS_EVENTS.HINT_SHOW]: { message: string; severity: 'major' };
+  [WS_EVENTS.HINT_SHOW]: { message: string; severity: 'major' | 'minor' };
   [WS_EVENTS.TTS_START]: { reply: string };
   [WS_EVENTS.TTS_CHUNK]: { data: string };
   [WS_EVENTS.TTS_END]: Record<string, never>;
@@ -112,7 +112,10 @@ export const ServerWsEventSchema = z.discriminatedUnion('type', [
   }),
   z.object({
     type: z.literal(WS_EVENTS.HINT_SHOW),
-    payload: z.object({ message: z.string(), severity: z.literal('major') }),
+    payload: z.object({
+      message: z.string(),
+      severity: z.enum(['major', 'minor']),
+    }),
   }),
   z.object({
     type: z.literal(WS_EVENTS.TTS_START),
