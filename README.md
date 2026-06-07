@@ -4,6 +4,16 @@
 
 > 本文档面向**评审复现**：说明项目功能、技术栈、第三方依赖与原创部分，并提供含 API Key 的完整配置与启动步骤。
 
+## 演示视频
+
+**完整功能讲解与效果演示（推荐先看）**：
+
+[![哔哩哔哩演示视频](https://img.shields.io/badge/哔哩哔哩-观看演示视频-00A1D6?style=for-the-badge&logo=bilibili&logoColor=white)](https://www.bilibili.com/video/BV1WSEb6TEUS/)
+
+链接：<https://www.bilibili.com/video/BV1WSEb6TEUS/>
+
+视频涵盖：场景选择 → 多轮语音对话 → 轻提示纠错 → 课后报告 → 练习历史与趋势图；并说明技术架构与发音评测 Mock 情况。详见根目录 [DEMO.md](./DEMO.md)。
+
 ---
 
 ## 功能概览
@@ -38,6 +48,7 @@
 
 ## 目录
 
+- [演示视频](#演示视频)
 - [功能概览](#功能概览)
 - [技术栈](#技术栈)
 - [评审复现指南](#评审复现指南)
