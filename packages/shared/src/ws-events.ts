@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { SessionReportSchema, type SessionReport } from './session-report.schema';
 
 /** Canonical WS event type strings — use these instead of literals in app code */
 export const WS_EVENTS = {
@@ -36,7 +37,7 @@ export type WsEventMap = {
   [WS_EVENTS.TTS_START]: { reply: string };
   [WS_EVENTS.TTS_CHUNK]: { data: string };
   [WS_EVENTS.TTS_END]: Record<string, never>;
-  [WS_EVENTS.REPORT_READY]: { report: Record<string, unknown> };
+  [WS_EVENTS.REPORT_READY]: { report: SessionReport };
   [WS_EVENTS.ERROR]: { code: string; message: string };
 };
 
@@ -128,7 +129,7 @@ export const ServerWsEventSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal(WS_EVENTS.TTS_END), payload: z.object({}) }),
   z.object({
     type: z.literal(WS_EVENTS.REPORT_READY),
-    payload: z.object({ report: z.record(z.unknown()) }),
+    payload: z.object({ report: SessionReportSchema }),
   }),
   z.object({
     type: z.literal(WS_EVENTS.ERROR),

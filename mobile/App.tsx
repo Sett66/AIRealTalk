@@ -1,15 +1,17 @@
 import { useState } from 'react';
 import { StatusBar, useColorScheme } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import type { Scenario } from '@airealtalk/shared';
+import type { Scenario, SessionReport } from '@airealtalk/shared';
 import { ConversationScreen } from './src/screens/ConversationScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
+import { ReportScreen } from './src/screens/ReportScreen';
 import { SceneSelectScreen } from './src/screens/SceneSelectScreen';
 
 type AppRoute =
   | { name: 'home' }
   | { name: 'sceneSelect' }
-  | { name: 'conversation'; scenario: Scenario };
+  | { name: 'conversation'; scenario: Scenario }
+  | { name: 'report'; report: SessionReport; scenarioTitle: string };
 
 function App() {
   const isDarkMode = useColorScheme() === 'dark';
@@ -34,6 +36,20 @@ function App() {
           scenarioId={route.scenario.id}
           scenarioTitle={route.scenario.title}
           onBack={() => setRoute({ name: 'sceneSelect' })}
+          onReportReady={(report) =>
+            setRoute({
+              name: 'report',
+              report,
+              scenarioTitle: route.scenario.title,
+            })
+          }
+        />
+      )}
+      {route.name === 'report' && (
+        <ReportScreen
+          report={route.report}
+          scenarioTitle={route.scenarioTitle}
+          onDone={() => setRoute({ name: 'sceneSelect' })}
         />
       )}
     </SafeAreaProvider>

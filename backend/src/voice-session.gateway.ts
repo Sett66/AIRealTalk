@@ -13,17 +13,24 @@ import {
   createServerEvent,
   type ClientWsEvent,
 } from '@airealtalk/shared';
+import type { LlmCorrection } from '@airealtalk/shared';
 import { AsrService } from './asr/asr.service';
 import { mergeInConversationHints } from './llm/hint.utils';
 import { LlmService, type ChatMessage } from './llm/llm.service';
+import { countWords, pcmDurationSec } from './report/report-metrics';
+import { ReportService } from './report/report.service';
 import { ScenarioService } from './scenario/scenario.service';
 import { TtsService } from './tts/tts.service';
 
 interface SessionState {
+  sessionId: string;
   scenarioId: string;
   scenario: Scenario;
   messages: ChatMessage[];
   turnCount: number;
+  userSpeakingDurationSec: number;
+  userWordCount: number;
+  turnCorrections: LlmCorrection[];
   audioChunks: Buffer[];
   isRecording: boolean;
   openingComplete: boolean;
@@ -40,6 +47,7 @@ export class VoiceSessionGateway
   constructor(
     private readonly asrService: AsrService,
     private readonly llmService: LlmService,
+    private readonly reportService: ReportService,
     private readonly ttsService: TtsService,
     private readonly scenarioService: ScenarioService,
   ) {}
@@ -124,7 +132,7 @@ export class VoiceSessionGateway
         await this.handleAudioEnd(client);
         break;
       case WS_EVENTS.SESSION_END:
-        this.logger.debug(`Session end received`);
+        await this.handleSessionEnd(client);
         break;
       default: {
         const _exhaustive: never = event;
@@ -140,10 +148,14 @@ export class VoiceSessionGateway
     try {
       const scenario = this.scenarioService.getById(scenarioId);
       const session: SessionState = {
+        sessionId: randomUUID(),
         scenarioId,
         scenario,
         messages: [{ role: 'assistant', content: scenario.openingLine }],
         turnCount: 0,
+        userSpeakingDurationSec: 0,
+        userWordCount: 0,
+        turnCorrections: [],
         audioChunks: [],
         isRecording: false,
         openingComplete: false,
@@ -216,6 +228,7 @@ export class VoiceSessionGateway
 
     const pcmBuffer = Buffer.concat(session.audioChunks);
     session.audioChunks = [];
+    session.userSpeakingDurationSec += pcmDurationSec(pcmBuffer.length);
     this.logger.log(`Audio recording ended (${pcmBuffer.length} bytes)`);
 
     this.send(client, WS_EVENTS.SESSION_PHASE, { phase: 'processing' });
@@ -242,6 +255,7 @@ export class VoiceSessionGateway
       });
 
       session.messages.push({ role: 'user', content: result.final });
+      session.userWordCount += countWords(result.final);
       session.turnCount += 1;
 
       this.logger.log(
@@ -273,6 +287,7 @@ export class VoiceSessionGateway
         role: 'assistant',
         content: llmResponse.reply,
       });
+      session.turnCorrections.push(...llmResponse.corrections);
 
       this.logger.log(
         `LLM reply turn ${session.turnCount} (${llmResponse.reply.length} chars)`,
@@ -310,6 +325,52 @@ export class VoiceSessionGateway
       this.logger.error(`LLM/TTS failed: ${message}`);
       this.send(client, WS_EVENTS.ERROR, {
         code: 'PIPELINE_FAILED',
+        message,
+      });
+    }
+  }
+
+  private async handleSessionEnd(client: WebSocket): Promise<void> {
+    const session = this.sessions.get(client);
+    if (!session) {
+      this.send(client, WS_EVENTS.ERROR, {
+        code: 'NO_SESSION',
+        message: '会话未初始化，无法生成报告',
+      });
+      return;
+    }
+
+    if (session.turnCount === 0) {
+      this.send(client, WS_EVENTS.ERROR, {
+        code: 'REPORT_NO_TURNS',
+        message: '至少完成一轮对话后才能生成报告',
+      });
+      return;
+    }
+
+    this.logger.log(
+      `Generating report for session=${session.sessionId} turns=${session.turnCount}`,
+    );
+
+    try {
+      const report = await this.reportService.generateReport({
+        sessionId: session.sessionId,
+        scenario: session.scenario,
+        messages: session.messages,
+        turnCount: session.turnCount,
+        durationSec: session.userSpeakingDurationSec,
+        userWordCount: session.userWordCount,
+        accumulatedCorrections: session.turnCorrections,
+      });
+
+      this.send(client, WS_EVENTS.REPORT_READY, { report });
+      this.logger.log(`Report ready for session=${session.sessionId}`);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Report generation failed';
+      this.logger.error(`Report failed: ${message}`);
+      this.send(client, WS_EVENTS.ERROR, {
+        code: 'REPORT_FAILED',
         message,
       });
     }

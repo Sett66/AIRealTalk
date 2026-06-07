@@ -6,7 +6,11 @@ import {
   Text,
   View,
 } from 'react-native';
-import { WS_EVENTS, type ServerWsEvent } from '@airealtalk/shared';
+import {
+  WS_EVENTS,
+  type ServerWsEvent,
+  type SessionReport,
+} from '@airealtalk/shared';
 import { AudioWave } from '../components/AudioWave';
 import { HintBubble, type HintEntry } from '../components/HintBubble';
 import { PhaseIndicator } from '../components/PhaseIndicator';
@@ -26,22 +30,36 @@ type ConversationScreenProps = {
   scenarioId: string;
   scenarioTitle: string;
   onBack: () => void;
+  onReportReady: (report: SessionReport) => void;
 };
 
 export function ConversationScreen({
   scenarioId,
   scenarioTitle,
   onBack,
+  onReportReady,
 }: ConversationScreenProps) {
   const [transcripts, setTranscripts] = useState<TranscriptEntry[]>([]);
   const [partialText, setPartialText] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [reportError, setReportError] = useState<string | null>(null);
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const [hints, setHints] = useState<HintEntry[]>([]);
   const phase = useSessionStore((state) => state.phase);
   const setPhase = useSessionStore((state) => state.setPhase);
   const resetPhase = useSessionStore((state) => state.resetPhase);
   const resetToIdleRef = useRef<() => void>(() => {});
   const setSpeakingRef = useRef<() => void>(() => {});
+  const onReportReadyRef = useRef(onReportReady);
+  const isGeneratingReportRef = useRef(false);
+
+  useEffect(() => {
+    onReportReadyRef.current = onReportReady;
+  }, [onReportReady]);
+
+  useEffect(() => {
+    isGeneratingReportRef.current = isGeneratingReport;
+  }, [isGeneratingReport]);
 
   useEffect(() => {
     resetPhase();
@@ -110,7 +128,17 @@ export function ConversationScreen({
         case WS_EVENTS.TTS_END:
           onTtsEnd();
           break;
+        case WS_EVENTS.REPORT_READY:
+          setIsGeneratingReport(false);
+          setReportError(null);
+          onReportReadyRef.current(event.payload.report);
+          break;
         case WS_EVENTS.ERROR:
+          if (isGeneratingReportRef.current) {
+            setReportError(event.payload.message);
+            setIsGeneratingReport(false);
+            break;
+          }
           setErrorMessage(event.payload.message);
           resetPhase();
           resetToIdleRef.current();
@@ -147,16 +175,31 @@ export function ConversationScreen({
   const wsLabel =
     status === 'connected' ? '已连接' : status === 'connecting' ? '连接中' : '已断开';
 
-  const handleExit = useCallback(() => {
-    if (status === 'connected') {
-      sendEvent(WS_EVENTS.SESSION_END, {});
-    }
-    resetPhase();
-    onBack();
-  }, [onBack, resetPhase, sendEvent, status]);
-
   const isBusy = phase === 'processing' || phase === 'speaking';
   const isListening = phase === 'listening';
+
+  const handleExit = useCallback(() => {
+    resetPhase();
+    onBack();
+  }, [onBack, resetPhase]);
+
+  const handleEndPractice = useCallback(() => {
+    if (status !== 'connected' || isBusy || isGeneratingReport) {
+      return;
+    }
+
+    setReportError(null);
+    setIsGeneratingReport(true);
+    const sent = sendEvent(WS_EVENTS.SESSION_END, {});
+    if (!sent) {
+      setIsGeneratingReport(false);
+      setReportError('连接已断开，请检查后重试');
+    }
+  }, [isBusy, isGeneratingReport, sendEvent, status]);
+
+  const handleRetryReport = useCallback(() => {
+    handleEndPractice();
+  }, [handleEndPractice]);
 
   const pttLabel = isListening
     ? '松手结束'
@@ -169,15 +212,31 @@ export function ConversationScreen({
   return (
     <ScreenContainer style={styles.container}>
       <View style={styles.header}>
-        <Pressable
-          onPress={handleExit}
-          hitSlop={8}
-          style={styles.backButton}
-          accessibilityRole="button"
-          accessibilityLabel="退出对话"
-        >
-          <Text style={styles.backText}>← 退出</Text>
-        </Pressable>
+        <View style={styles.headerActions}>
+          <Pressable
+            onPress={handleExit}
+            hitSlop={8}
+            style={styles.backButton}
+            accessibilityRole="button"
+            accessibilityLabel="退出对话"
+          >
+            <Text style={styles.backText}>← 退出</Text>
+          </Pressable>
+          <Pressable
+            onPress={handleEndPractice}
+            hitSlop={8}
+            style={[
+              styles.endPracticeButton,
+              (status !== 'connected' || isBusy || isGeneratingReport) &&
+                styles.endPracticeButtonDisabled,
+            ]}
+            disabled={status !== 'connected' || isBusy || isGeneratingReport}
+            accessibilityRole="button"
+            accessibilityLabel="结束练习"
+          >
+            <Text style={styles.endPracticeText}>结束练习</Text>
+          </Pressable>
+        </View>
         <Text style={styles.title}>{scenarioTitle}</Text>
         <View style={styles.statusRow}>
           <PhaseIndicator phase={phase} />
@@ -256,6 +315,21 @@ export function ConversationScreen({
         </View>
       )}
 
+      {reportError && (
+        <View style={styles.reportErrorBanner}>
+          <Text style={styles.reportErrorText}>{reportError}</Text>
+          <Pressable style={styles.retryButton} onPress={handleRetryReport}>
+            <Text style={styles.retryButtonText}>重试生成报告</Text>
+          </Pressable>
+        </View>
+      )}
+
+      {isGeneratingReport && (
+        <View style={styles.reportLoadingBanner}>
+          <Text style={styles.reportLoadingText}>正在生成课后报告…</Text>
+        </View>
+      )}
+
       <Pressable
         style={[
           styles.pttButton,
@@ -282,13 +356,32 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     gap: 8,
   },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
   backButton: {
-    alignSelf: 'flex-start',
     minHeight: 44,
     minWidth: 88,
     justifyContent: 'center',
     paddingRight: 12,
-    marginBottom: 4,
+  },
+  endPracticeButton: {
+    minHeight: 44,
+    paddingHorizontal: 14,
+    justifyContent: 'center',
+    backgroundColor: '#0f172a',
+    borderRadius: 10,
+  },
+  endPracticeButtonDisabled: {
+    backgroundColor: '#94a3b8',
+  },
+  endPracticeText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '700',
   },
   backText: {
     color: '#2563eb',
@@ -440,6 +533,46 @@ const styles = StyleSheet.create({
   errorText: {
     color: '#dc2626',
     fontSize: 13,
+  },
+  reportErrorBanner: {
+    backgroundColor: '#fef2f2',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 12,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: '#fecaca',
+  },
+  reportErrorText: {
+    color: '#b91c1c',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  retryButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#dc2626',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  retryButtonText: {
+    color: '#ffffff',
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  reportLoadingBanner: {
+    backgroundColor: '#eff6ff',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+  },
+  reportLoadingText: {
+    color: '#1d4ed8',
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   pttButton: {
     backgroundColor: '#2563eb',

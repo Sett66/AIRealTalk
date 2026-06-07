@@ -8,13 +8,13 @@
 
 ## 验收标准
 
-- [ ] 对话页有「结束练习」按钮，点击后进入报告页
-- [ ] 报告含 ≥ 3 条表达纠错（original / suggestion / category）
-- [ ] 报告含语法问题分类统计（grammarIssues）
-- [ ] 报告含 turnCount、durationSec、wpm、goalCoverage（0-100）
-- [ ] `SessionReportSchema`（Zod）在 shared 包定义
-- [ ] 报告生成失败时显示友好错误，可重试
-- [ ] 本 Issue 可不含发音分数（Issue #09 补充）
+- [x] 对话页有「结束练习」按钮，点击后进入报告页
+- [x] 报告含 ≥ 3 条表达纠错（original / suggestion / category）
+- [x] 报告含语法问题分类统计（grammarIssues）
+- [x] 报告含 turnCount、durationSec、wpm、goalCoverage（0-100）
+- [x] `SessionReportSchema`（Zod）在 shared 包定义
+- [x] 报告生成失败时显示友好错误，可重试
+- [x] 本 Issue 可不含发音分数（Issue #09 补充）
 
 ## 阻塞关系
 
@@ -34,9 +34,9 @@
 
 ### 验证步骤
 
-1. 完成 5 轮对话后结束练习
+1. 完成 5 轮对话后点击「结束练习」
 2. 检查报告纠错条目与统计数据
-3. 验证 Zod schema 校验报告结构
+3. 断网或模拟失败时点击「重试生成报告」
 
 ### 参考 SPEC 章节
 
