@@ -7,7 +7,9 @@
 - 场景选择（面试 / 点餐 / 会议）
 - 实时语音对话（ASR → DeepSeek → TTS）
 - 对话中轻提示纠错 + 课后详析报告
-- 基础发音评测与练习历史趋势
+- 练习历史列表、发音趋势折线图、点击摘要回看详细报告
+
+> **发音评测说明**：当前默认使用 **mock 发音评测**（按转写文本生成模拟分数，用于打通报告与历史链路）。阿里云 ssapi 口语评测需端侧 SDK（Android SDK + backend 授权 `warrant_id`），backend 直连 WebSocket 暂不可用；真实发音评分将在后续迭代接入。
 
 ## 技术栈
 
@@ -16,7 +18,7 @@
 | 移动端 | React Native Bare + TypeScript（Android 优先，**不用 Expo**） |
 | 后端 | NestJS + TypeScript |
 | 共享 | pnpm monorepo + `@airealtalk/shared`（Zod schema） |
-| 云服务 | 阿里云 NLS + 发音评测、DeepSeek LLM |
+| 云服务 | 阿里云 NLS（ASR/TTS）、DeepSeek LLM；发音评测 mock（后续接 ssapi） |
 
 ## 文档导航
 
@@ -63,6 +65,19 @@ pnpm android          # 终端 2：构建并安装到模拟器/真机
 | Android 模拟器 | 默认 `10.0.2.2:3000`（见 `mobile/src/config.ts`） |
 | 真机 | 将 `mobile/src/config.ts` 改为电脑局域网 IP |
 
+### Mock 模式（无云凭证或发音评测）
+
+在 `backend/.env` 中可设置：
+
+```env
+USE_MOCK_ASR=true
+USE_MOCK_LLM=true
+USE_MOCK_TTS=true
+USE_MOCK_PRONUNCIATION=true   # 默认 true；真实 ssapi 评测待后续接入
+```
+
+验证 Issue #09：`node scripts/verify-issue-09.mjs`（需 backend mock 三件套 + `USE_MOCK_PRONUNCIATION=true`）
+
 ### 常用命令
 
 ```bash
@@ -92,25 +107,26 @@ AIRealTalk/
 ├── packages/shared/     # @airealtalk/shared — 类型与 Zod schema
 ├── backend/             # @airealtalk/backend — NestJS
 ├── mobile/              # @airealtalk/mobile — React Native
-├── scripts/             # postinstall 等工具脚本
+├── scripts/             # postinstall、verify-issue-XX 等
 └── docs/                # SPEC、Phase、Issue 文档
 ```
 
 ## Agent 快速上手
 
 1. 阅读 [docs/SPEC.md](docs/SPEC.md)
-2. **Issue #07 待领取**，文档：[Issue #07 — 对话中纠错提示](docs/issues/issue-07.md)
+2. **Issue #10 待领取**，文档：[Issue #10 — 稳定性 + MVP 验收](docs/issues/issue-10.md)
 3. 确认前置 Issue 已完成再领取任务
 4. **禁止** Expo、禁止 API Key 写入 mobile
 
 ## 本地环境（云服务，Issue #03 起需要）
 
 - 阿里云 NLS + DeepSeek API Key → 复制 `backend/.env.example` 为 `backend/.env`
+- 口语评测 AppKey/AppSecret（智能科教平台）→ 可选；未配置或 `USE_MOCK_PRONUNCIATION=true` 时使用 mock
 - Android 真机与电脑同一局域网
 
 ## 项目状态
 
-**当前进度**：Phase 3 待开始 — [Issue #07 对话中纠错提示](docs/issues/issue-07.md)
+**当前进度**：Phase 5 待开始 — [Issue #10 稳定性 + MVP 验收](docs/issues/issue-10.md)
 
 | Issue | 状态 |
 |-------|------|
@@ -120,6 +136,10 @@ AIRealTalk/
 | [#04](docs/issues/issue-04.md) LLM + TTS | ✅ |
 | [#05](docs/issues/issue-05.md) 单场景完整对话环 | ✅ |
 | [#06](docs/issues/issue-06.md) 三场景 + UI 状态机 | ✅ |
+| [#07](docs/issues/issue-07.md) 对话中轻提示纠错 | ✅ |
+| [#08](docs/issues/issue-08.md) 课后详析报告 | ✅ |
+| [#09](docs/issues/issue-09.md) 发音评测 + 练习历史 | ✅（发音 mock，真实 ssapi 待后续） |
+| [#10](docs/issues/issue-10.md) 稳定性 + MVP 验收 | ⬜ |
 
 ## 许可证
 

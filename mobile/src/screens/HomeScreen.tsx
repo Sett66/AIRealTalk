@@ -15,9 +15,10 @@ type LoadState = 'idle' | 'loading' | 'ok' | 'error';
 
 type HomeScreenProps = {
   onStartPractice: () => void;
+  onOpenHistory: () => void;
 };
 
-export function HomeScreen({ onStartPractice }: HomeScreenProps) {
+export function HomeScreen({ onStartPractice, onOpenHistory }: HomeScreenProps) {
   const [state, setState] = useState<LoadState>('idle');
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -49,7 +50,7 @@ export function HomeScreen({ onStartPractice }: HomeScreenProps) {
   return (
     <ScreenContainer style={styles.container}>
       <Text style={styles.title}>AIRealTalk</Text>
-      <Text style={styles.subtitle}>英语口语练习 · Issue #06</Text>
+      <Text style={styles.subtitle}>英语口语练习 · Issue #09</Text>
 
       <View style={styles.card}>
         <Text style={styles.cardLabel}>Backend 健康检查</Text>
@@ -78,6 +79,10 @@ export function HomeScreen({ onStartPractice }: HomeScreenProps) {
           <Text style={styles.secondaryButtonText}>重新检测</Text>
         </Pressable>
       </View>
+
+      <Pressable style={styles.historyButton} onPress={onOpenHistory}>
+        <Text style={styles.historyButtonText}>练习历史</Text>
+      </Pressable>
 
       <Pressable
         style={[styles.primaryButton, state !== 'ok' && styles.primaryButtonDisabled]}
@@ -171,6 +176,19 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingVertical: 18,
     alignItems: 'center',
+  },
+  historyButton: {
+    backgroundColor: '#ffffff',
+    borderRadius: 14,
+    paddingVertical: 16,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+  },
+  historyButtonText: {
+    color: '#334155',
+    fontWeight: '700',
+    fontSize: 16,
   },
   primaryButtonDisabled: {
     backgroundColor: '#94a3b8',

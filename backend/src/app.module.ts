@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AsrModule } from './asr/asr.module';
 import { LlmModule } from './llm/llm.module';
+import { PronunciationModule } from './pronunciation/pronunciation.module';
 import { ReportModule } from './report/report.module';
 import { ScenarioModule } from './scenario/scenario.module';
 import { TtsModule } from './tts/tts.module';
@@ -17,6 +18,7 @@ import { VoiceSessionGateway } from './voice-session.gateway';
     AsrModule,
     LlmModule,
     ScenarioModule,
+    PronunciationModule,
     ReportModule,
     TtsModule,
   ],
