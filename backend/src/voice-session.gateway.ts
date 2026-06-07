@@ -14,6 +14,7 @@ import {
   type ClientWsEvent,
 } from '@airealtalk/shared';
 import { AsrService } from './asr/asr.service';
+import { mergeInConversationHints } from './llm/hint.utils';
 import { LlmService, type ChatMessage } from './llm/llm.service';
 import { ScenarioService } from './scenario/scenario.service';
 import { TtsService } from './tts/tts.service';
@@ -276,6 +277,22 @@ export class VoiceSessionGateway
       this.logger.log(
         `LLM reply turn ${session.turnCount} (${llmResponse.reply.length} chars)`,
       );
+
+      const lastUserMessage = [...session.messages]
+        .reverse()
+        .find((message) => message.role === 'user');
+      const hints = mergeInConversationHints(
+        llmResponse.hints,
+        lastUserMessage?.content ?? '',
+        this.logger,
+      );
+
+      for (const hint of hints) {
+        this.send(client, WS_EVENTS.HINT_SHOW, {
+          message: hint.message,
+          severity: hint.severity,
+        });
+      }
 
       await this.playTts(client, llmResponse.reply);
     } catch (error) {

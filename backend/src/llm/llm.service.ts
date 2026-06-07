@@ -8,10 +8,26 @@ export interface ChatMessage {
 const JSON_OUTPUT_INSTRUCTION = `Output JSON only with this exact shape:
 {
   "reply": "your spoken English response",
-  "hints": [],
-  "corrections": []
+  "hints": [{ "severity": "major" | "minor", "message": "brief in-conversation hint" }],
+  "corrections": [{ "original": "user phrase", "suggestion": "better phrase", "category": "tense" }]
 }
-Always return an empty hints array and empty corrections array for now.`;
+
+Hints rules (LANGUAGE FORM ONLY — grammar, phrasing, incomplete sentences):
+- Hints correct HOW the user spoke English, NOT what they chose to say.
+- severity "major": serious grammar errors, incomplete/fragment sentences, missing key words, wrong tense with time markers.
+- severity "minor": awkward phrasing, word choice, collocation, missing articles, expression polish.
+- ALWAYS check for incomplete sentences: very short fragments, trailing "and/at/about/for", dangling phrases like "I am not good at.", adjective-only fragments like "Most challenging."
+- Include multiple hints when several language issues exist (typically 1-4 per turn).
+- Keep each hint under 20 words, simple English or brief Chinese.
+
+STRICTLY FORBIDDEN in hints (put these in "reply" as the interviewer, NEVER in hints):
+- Interview strategy or answer-content advice (e.g. "mention your passion", "don't only talk about salary", "say why you're interested in the major").
+- Suggesting different topics, motivations, or better answers to the question.
+- Any hint that judges whether the user's answer is good enough substantively.
+
+Use "hints": [] when the user's English is grammatically complete and clear, even if you want to probe deeper in your "reply".
+
+Corrections: record grammar/expression fixes for the post-session report; category is one of tense, preposition, collocation, expression, other.`;
 
 export abstract class LlmService {
   buildSystemPrompt(scenario: Scenario): string {
