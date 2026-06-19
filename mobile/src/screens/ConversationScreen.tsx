@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   BackHandler,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -46,6 +48,7 @@ type ConversationScreenProps = {
 };
 
 const PROCESSING_TIMEOUT_MS = 35_000;
+const NEAR_BOTTOM_THRESHOLD = 80;
 const RETRYABLE_ERROR_CODES = new Set([
   'ASR_FAILED',
   'ASR_EMPTY',
@@ -78,6 +81,9 @@ export function ConversationScreen({
   const useMockPronunciationRef = useRef(true);
   const latestReportRef = useRef<SessionReport | null>(null);
   const pronunciationInFlightRef = useRef(false);
+  const scrollViewRef = useRef<ScrollView>(null);
+  const isNearBottomRef = useRef(true);
+  const shouldScrollAfterLayoutRef = useRef(false);
 
   useEffect(() => {
     onReportReadyRef.current = onReportReady;
@@ -259,6 +265,50 @@ export function ConversationScreen({
 
   const isBusy = phase === 'processing' || phase === 'speaking';
   const isListening = phase === 'listening';
+
+  const handleScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const { contentOffset, contentSize, layoutMeasurement } =
+        event.nativeEvent;
+      const distanceFromBottom =
+        contentSize.height - layoutMeasurement.height - contentOffset.y;
+      isNearBottomRef.current = distanceFromBottom <= NEAR_BOTTOM_THRESHOLD;
+    },
+    [],
+  );
+
+  const scrollToBottomIfNeeded = useCallback(() => {
+    if (!isNearBottomRef.current) {
+      return;
+    }
+    shouldScrollAfterLayoutRef.current = true;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (!shouldScrollAfterLayoutRef.current) {
+          return;
+        }
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      });
+    });
+  }, []);
+
+  const handleContentSizeChange = useCallback(() => {
+    if (!shouldScrollAfterLayoutRef.current || !isNearBottomRef.current) {
+      return;
+    }
+    shouldScrollAfterLayoutRef.current = false;
+    scrollViewRef.current?.scrollToEnd({ animated: true });
+  }, []);
+
+  useEffect(() => {
+    scrollToBottomIfNeeded();
+  }, [transcripts, scrollToBottomIfNeeded]);
+
+  useEffect(() => {
+    if (phase === 'processing') {
+      scrollToBottomIfNeeded();
+    }
+  }, [phase, scrollToBottomIfNeeded]);
 
   const handleExit = useCallback(async () => {
     await abortRecording();
@@ -442,7 +492,14 @@ export function ConversationScreen({
         />
       ) : (
         <>
-      <ScrollView style={styles.transcriptArea} contentContainerStyle={styles.transcriptContent}>
+      <ScrollView
+        ref={scrollViewRef}
+        style={styles.transcriptArea}
+        contentContainerStyle={styles.transcriptContent}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
+        onContentSizeChange={handleContentSizeChange}
+      >
         {transcripts.length === 0 && !partialText && (
           <Text style={styles.placeholder}>
             连接后将自动播放 AI 开场白。准备好后按住按钮开始对话。
