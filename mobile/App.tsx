@@ -27,11 +27,16 @@ function App() {
 
   const handleReportReady = (report: SessionReport, scenarioTitle: string) => {
     void savePracticeRecord(report, scenarioTitle);
-    setRoute({
-      name: 'report',
-      report,
-      scenarioTitle,
-      returnTo: 'sceneSelect',
+    setRoute((prev) => {
+      if (prev.name === 'report' && prev.report.sessionId === report.sessionId) {
+        return { ...prev, report };
+      }
+      return {
+        name: 'report',
+        report,
+        scenarioTitle,
+        returnTo: 'sceneSelect',
+      };
     });
   };
 
@@ -71,6 +76,9 @@ function App() {
           scenarioTitle={route.scenario.title}
           onBack={() => setRoute({ name: 'sceneSelect' })}
           onReportReady={(report) =>
+            handleReportReady(report, route.scenario.title)
+          }
+          onReportUpdated={(report) =>
             handleReportReady(report, route.scenario.title)
           }
         />

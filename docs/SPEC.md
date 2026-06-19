@@ -74,7 +74,8 @@ MVP 提供 **3 个固定场景**：
 - MVP：**词/句级**评分（非音素级口型纠正）
 - 展示：课后报告中的均分（0–100）与逐句分数
 - 提供商：阿里云口语评测（首选）；讯飞 ISE 备选
-- 必须通过 backend 代理
+- **密钥与授权**由 backend 代理（`POST /pronunciation/authorize`）；**打分在 Android 原生模块**执行（`PronunciationEngine`）
+- Mock 模式（`USE_MOCK_PRONUNCIATION=true`）下 backend 仍可用 mock 分数，便于 CI 与无 Key 演示
 
 ### 2.5 可量化反馈
 
@@ -169,8 +170,9 @@ AIRealTalk/
 
 | 方法 | 路径 | 响应 |
 |------|------|------|
-| GET | `/health` | `{ status: 'ok', timestamp: string }` |
+| GET | `/health` | `{ status: 'ok', timestamp: string, useMockPronunciation?: boolean }` |
 | GET | `/scenarios` | `Scenario[]` |
+| POST | `/pronunciation/authorize` | `{ warrantId, expireAt, applicationId, userId, timestamp, sig, connectId }` |
 
 ### 5.2 WebSocket 事件
 
@@ -186,6 +188,7 @@ AIRealTalk/
 | `audio:chunk` | `{ data: string }` base64 |
 | `audio:end` | `{}` |
 | `session:end` | `{}` |
+| `pronunciation:submit` | `{ pronunciationAvg: number; sentenceScores: { text, score }[] }` |
 
 **服务端 → 客户端**
 
@@ -200,6 +203,7 @@ AIRealTalk/
 | `tts:chunk` | `{ data: string }` base64 |
 | `tts:end` | `{}` |
 | `report:ready` | `{ report: SessionReport }` |
+| `report:pronunciation_ready` | `{ report: SessionReport }`（评测超时补发） |
 | `error` | `{ code: string; message: string }` |
 
 ### 5.3 核心共享类型
@@ -274,6 +278,7 @@ USE_MOCK_ASR=false
 USE_MOCK_LLM=false
 USE_MOCK_TTS=false
 USE_MOCK_PRONUNCIATION=false
+PRONUNCIATION_WAIT_MS=20000
 ```
 
 提供 `backend/.env.example`；**禁止提交 `.env`**。

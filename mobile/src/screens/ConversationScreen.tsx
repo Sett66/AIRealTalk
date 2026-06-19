@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  BackHandler,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -19,7 +20,16 @@ import { ScreenContainer } from '../components/ScreenContainer';
 import { useAudioRecorder } from '../hooks/useAudioRecorder';
 import { useTtsPlayer } from '../hooks/useTtsPlayer';
 import { useWebSocket } from '../hooks/useWebSocket';
+import {
+  evaluateAndBuildSubmitPayload,
+  fetchBackendHealth,
+  mergePronunciationIntoReport,
+} from '../services/pronunciation';
 import { useSessionStore } from '../stores/session-store';
+import {
+  getCachedTurns,
+  useTurnAudioStore,
+} from '../stores/turn-audio-store';
 
 interface TranscriptEntry {
   id: string;
@@ -32,6 +42,7 @@ type ConversationScreenProps = {
   scenarioTitle: string;
   onBack: () => void;
   onReportReady: (report: SessionReport) => void;
+  onReportUpdated?: (report: SessionReport) => void;
 };
 
 const PROCESSING_TIMEOUT_MS = 35_000;
@@ -47,6 +58,7 @@ export function ConversationScreen({
   scenarioTitle,
   onBack,
   onReportReady,
+  onReportUpdated,
 }: ConversationScreenProps) {
   const [transcripts, setTranscripts] = useState<TranscriptEntry[]>([]);
   const [partialText, setPartialText] = useState<string | null>(null);
@@ -61,11 +73,29 @@ export function ConversationScreen({
   const resetToIdleRef = useRef<() => void>(() => {});
   const setSpeakingRef = useRef<() => void>(() => {});
   const onReportReadyRef = useRef(onReportReady);
+  const onReportUpdatedRef = useRef(onReportUpdated);
   const isGeneratingReportRef = useRef(false);
+  const useMockPronunciationRef = useRef(true);
+  const latestReportRef = useRef<SessionReport | null>(null);
+  const pronunciationInFlightRef = useRef(false);
 
   useEffect(() => {
     onReportReadyRef.current = onReportReady;
   }, [onReportReady]);
+
+  useEffect(() => {
+    onReportUpdatedRef.current = onReportUpdated;
+  }, [onReportUpdated]);
+
+  useEffect(() => {
+    void fetchBackendHealth()
+      .then((health) => {
+        useMockPronunciationRef.current = health.useMockPronunciation;
+      })
+      .catch(() => {
+        useMockPronunciationRef.current = true;
+      });
+  }, []);
 
   useEffect(() => {
     isGeneratingReportRef.current = isGeneratingReport;
@@ -73,7 +103,12 @@ export function ConversationScreen({
 
   useEffect(() => {
     resetPhase();
-    return () => resetPhase();
+    return () => {
+      resetPhase();
+      if (!pronunciationInFlightRef.current) {
+        void useTurnAudioStore.getState().clearTurns();
+      }
+    };
   }, [resetPhase, scenarioId]);
 
   const { onTtsStart, onTtsChunk, onTtsEnd } = useTtsPlayer({
@@ -97,6 +132,9 @@ export function ConversationScreen({
           setPartialText(null);
           const text = event.payload.text.trim();
           if (text) {
+            useTurnAudioStore
+              .getState()
+              .attachTextToTurn(event.payload.utteranceId, text);
             setTranscripts((prev) => [
               ...prev,
               { id: event.payload.utteranceId, text, role: 'user' },
@@ -143,7 +181,11 @@ export function ConversationScreen({
         case WS_EVENTS.REPORT_READY:
           setIsGeneratingReport(false);
           setReportError(null);
+          latestReportRef.current = event.payload.report;
           onReportReadyRef.current(event.payload.report);
+          break;
+        case WS_EVENTS.REPORT_PRONUNCIATION_READY:
+          onReportUpdatedRef.current?.(event.payload.report);
           break;
         case WS_EVENTS.ERROR:
           if (isGeneratingReportRef.current) {
@@ -168,6 +210,7 @@ export function ConversationScreen({
     requestPermission,
     startRecording,
     stopRecording,
+    abortRecording,
     resetToIdle,
     setSpeaking,
   } = useAudioRecorder({
@@ -217,10 +260,79 @@ export function ConversationScreen({
   const isBusy = phase === 'processing' || phase === 'speaking';
   const isListening = phase === 'listening';
 
-  const handleExit = useCallback(() => {
+  const handleExit = useCallback(async () => {
+    await abortRecording();
     resetPhase();
+    if (!pronunciationInFlightRef.current) {
+      void useTurnAudioStore.getState().clearTurns();
+    }
     onBack();
-  }, [onBack, resetPhase]);
+  }, [abortRecording, onBack, resetPhase]);
+
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      void handleExit();
+      return true;
+    });
+    return () => subscription.remove();
+  }, [handleExit]);
+
+  const runClientPronunciation = useCallback(async () => {
+    if (useMockPronunciationRef.current) {
+      return;
+    }
+
+    const turns = getCachedTurns();
+    if (turns.length === 0) {
+      console.warn('[pronunciation] no cached turn audio');
+      return;
+    }
+
+    pronunciationInFlightRef.current = true;
+
+    try {
+      const payload = await evaluateAndBuildSubmitPayload(turns);
+      if (!payload) {
+        console.warn(
+          '[pronunciation] skipped: libssound.so 未配置或原生模块不可用',
+        );
+        const baseReport = latestReportRef.current;
+        if (baseReport && onReportUpdatedRef.current) {
+          onReportUpdatedRef.current({
+            ...baseReport,
+            summary:
+              `${baseReport.summary}\n\n（发音评测未执行：请在 jniLibs 目录放置 libssound.so 后重新编译 App，详见 README）`,
+          });
+        }
+        return;
+      }
+
+      const sent = sendEvent(WS_EVENTS.PRONUNCIATION_SUBMIT, payload);
+      const baseReport = latestReportRef.current;
+      if (
+        baseReport &&
+        (baseReport.pronunciationAvg === undefined || !sent)
+      ) {
+        onReportUpdatedRef.current?.(
+          mergePronunciationIntoReport(baseReport, payload),
+        );
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : '发音评测失败';
+      console.warn('[pronunciation] evaluation failed', message);
+      const baseReport = latestReportRef.current;
+      if (baseReport && onReportUpdatedRef.current) {
+        onReportUpdatedRef.current({
+          ...baseReport,
+          summary: `${baseReport.summary}\n\n（发音评测未完成：${message}）`,
+        });
+      }
+    } finally {
+      pronunciationInFlightRef.current = false;
+      await useTurnAudioStore.getState().clearTurns();
+    }
+  }, [sendEvent]);
 
   const handleEndPractice = useCallback(() => {
     if (status !== 'connected' || isBusy || isGeneratingReport) {
@@ -229,12 +341,22 @@ export function ConversationScreen({
 
     setReportError(null);
     setIsGeneratingReport(true);
+    void fetchBackendHealth()
+      .then((health) => {
+        useMockPronunciationRef.current = health.useMockPronunciation;
+      })
+      .catch(() => {
+        useMockPronunciationRef.current = true;
+      })
+      .finally(() => {
+        void runClientPronunciation();
+      });
     const sent = sendEvent(WS_EVENTS.SESSION_END, {});
     if (!sent) {
       setIsGeneratingReport(false);
       setReportError('连接已断开，请检查后重试');
     }
-  }, [isBusy, isGeneratingReport, sendEvent, status]);
+  }, [isBusy, isGeneratingReport, runClientPronunciation, sendEvent, status]);
 
   const handleRetryTurn = useCallback(() => {
     setErrorMessage(null);

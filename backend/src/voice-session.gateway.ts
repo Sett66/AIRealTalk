@@ -1,4 +1,5 @@
 import { Logger, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import {
   OnGatewayConnection,
   OnGatewayDisconnect,
@@ -19,10 +20,19 @@ import { mergeInConversationHints } from './llm/hint.utils';
 import { LlmService, type ChatMessage } from './llm/llm.service';
 import { countWords, pcmDurationSec } from './report/report-metrics';
 import { PronunciationService } from './pronunciation/pronunciation.service';
-import type { TurnAudio } from './pronunciation/pronunciation.types';
+import type { PronunciationResult, TurnAudio } from './pronunciation/pronunciation.types';
+import type { SessionReport } from '@airealtalk/shared';
 import { ReportService } from './report/report.service';
 import { ScenarioService } from './scenario/scenario.service';
 import { TtsService } from './tts/tts.service';
+
+interface PendingReportState {
+  baseReport?: SessionReport;
+  pronunciationResult?: PronunciationResult;
+  reportSent: boolean;
+  pronunciationTimedOut: boolean;
+  waitTimeout?: ReturnType<typeof setTimeout>;
+}
 
 interface SessionState {
   sessionId: string;
@@ -38,6 +48,8 @@ interface SessionState {
   isRecording: boolean;
   openingComplete: boolean;
   isSpeaking: boolean;
+  pendingReport?: PendingReportState;
+  isEndingSession: boolean;
 }
 
 @WebSocketGateway({ path: '/', cors: { origin: '*' } })
@@ -48,6 +60,7 @@ export class VoiceSessionGateway
   private readonly sessions = new WeakMap<WebSocket, SessionState>();
 
   constructor(
+    private readonly config: ConfigService,
     private readonly asrService: AsrService,
     private readonly llmService: LlmService,
     private readonly reportService: ReportService,
@@ -138,6 +151,9 @@ export class VoiceSessionGateway
       case WS_EVENTS.SESSION_END:
         await this.handleSessionEnd(client);
         break;
+      case WS_EVENTS.PRONUNCIATION_SUBMIT:
+        this.handlePronunciationSubmit(client, event.payload);
+        break;
       default: {
         const _exhaustive: never = event;
         return _exhaustive;
@@ -165,6 +181,7 @@ export class VoiceSessionGateway
         isRecording: false,
         openingComplete: false,
         isSpeaking: false,
+        isEndingSession: false,
       };
       this.sessions.set(client, session);
 
@@ -336,6 +353,108 @@ export class VoiceSessionGateway
     }
   }
 
+  private useMockPronunciation(): boolean {
+    return this.config.get<string>('USE_MOCK_PRONUNCIATION') !== 'false';
+  }
+
+  private getPronunciationWaitMs(turnCount: number): number {
+    const configured = Number(
+      this.config.get<string>('PRONUNCIATION_WAIT_MS') ?? '20000',
+    );
+    const base =
+      Number.isFinite(configured) && configured > 0 ? configured : 20_000;
+    return Math.max(base, turnCount * 50_000);
+  }
+
+  private mergePronunciation(
+    report: SessionReport,
+    pronunciation: PronunciationResult,
+  ): SessionReport {
+    return {
+      ...report,
+      pronunciationAvg: pronunciation.pronunciationAvg,
+      sentenceScores: pronunciation.sentenceScores,
+    };
+  }
+
+  private clearPendingReportTimeout(pending: PendingReportState): void {
+    if (pending.waitTimeout) {
+      clearTimeout(pending.waitTimeout);
+      pending.waitTimeout = undefined;
+    }
+  }
+
+  private tryDeliverReport(client: WebSocket, session: SessionState): void {
+    const pending = session.pendingReport;
+    if (!pending?.baseReport) {
+      return;
+    }
+
+    if (!pending.reportSent) {
+      if (!pending.pronunciationResult && !pending.pronunciationTimedOut) {
+        return;
+      }
+
+      const report = pending.pronunciationResult
+        ? this.mergePronunciation(pending.baseReport, pending.pronunciationResult)
+        : pending.baseReport;
+
+      this.clearPendingReportTimeout(pending);
+      pending.reportSent = true;
+      this.send(client, WS_EVENTS.REPORT_READY, { report });
+      this.logger.log(
+        `Report ready for session=${session.sessionId} pronunciation=${Boolean(pending.pronunciationResult)}`,
+      );
+      session.isEndingSession = false;
+      return;
+    }
+
+    if (pending.pronunciationResult) {
+      const report = this.mergePronunciation(
+        pending.baseReport,
+        pending.pronunciationResult,
+      );
+      this.send(client, WS_EVENTS.REPORT_PRONUNCIATION_READY, { report });
+      this.logger.log(
+        `Pronunciation patch ready for session=${session.sessionId} avg=${pending.pronunciationResult.pronunciationAvg}`,
+      );
+      session.pendingReport = undefined;
+      session.isEndingSession = false;
+    }
+  }
+
+  private handlePronunciationSubmit(
+    client: WebSocket,
+    payload: {
+      pronunciationAvg: number;
+      sentenceScores: Array<{ text: string; score: number }>;
+    },
+  ): void {
+    const session = this.sessions.get(client);
+    if (!session) {
+      this.logger.warn('Ignored pronunciation:submit without active session');
+      return;
+    }
+
+    if (!session.pendingReport) {
+      session.pendingReport = {
+        reportSent: false,
+        pronunciationTimedOut: false,
+      };
+    }
+
+    session.pendingReport.pronunciationResult = {
+      pronunciationAvg: payload.pronunciationAvg,
+      sentenceScores: payload.sentenceScores,
+    };
+
+    this.logger.log(
+      `Pronunciation submit received session=${session.sessionId} avg=${payload.pronunciationAvg}`,
+    );
+
+    this.tryDeliverReport(client, session);
+  }
+
   private async handleSessionEnd(client: WebSocket): Promise<void> {
     const session = this.sessions.get(client);
     if (!session) {
@@ -354,9 +473,38 @@ export class VoiceSessionGateway
       return;
     }
 
+    if (session.isEndingSession) {
+      return;
+    }
+
+    session.isEndingSession = true;
+
     this.logger.log(
       `Generating report for session=${session.sessionId} turns=${session.turnCount}`,
     );
+
+    if (!this.useMockPronunciation()) {
+      const existingResult = session.pendingReport?.pronunciationResult;
+      session.pendingReport = {
+        reportSent: false,
+        pronunciationTimedOut: false,
+        pronunciationResult: existingResult,
+      };
+      if (!session.pendingReport.waitTimeout) {
+        session.pendingReport.waitTimeout = setTimeout(() => {
+        const pending = session.pendingReport;
+        if (!pending || pending.reportSent) {
+          return;
+        }
+
+        pending.pronunciationTimedOut = true;
+        this.logger.warn(
+          `Pronunciation wait timeout for session=${session.sessionId}`,
+        );
+        this.tryDeliverReport(client, session);
+      }, this.getPronunciationWaitMs(session.turnCount));
+      }
+    }
 
     try {
       const report = await this.reportService.generateReport({
@@ -369,35 +517,49 @@ export class VoiceSessionGateway
         accumulatedCorrections: session.turnCorrections,
       });
 
-      let enrichedReport = report;
-      try {
-        const pronunciation = await this.pronunciationService.evaluateSession(
-          session.turnAudios,
-        );
-        enrichedReport = {
-          ...report,
-          pronunciationAvg: pronunciation.pronunciationAvg,
-          sentenceScores: pronunciation.sentenceScores,
-        };
-        this.logger.log(
-          `Pronunciation ready avg=${pronunciation.pronunciationAvg}`,
-        );
-      } catch (pronunciationError) {
-        const message =
-          pronunciationError instanceof Error
-            ? pronunciationError.message
-            : 'Pronunciation evaluation failed';
-        this.logger.warn(
-          `Pronunciation skipped for session=${session.sessionId}: ${message}`,
-        );
+      if (this.useMockPronunciation()) {
+        let enrichedReport = report;
+        try {
+          const pronunciation = await this.pronunciationService.evaluateSession(
+            session.turnAudios,
+          );
+          enrichedReport = this.mergePronunciation(report, pronunciation);
+          this.logger.log(
+            `Pronunciation ready avg=${pronunciation.pronunciationAvg}`,
+          );
+        } catch (pronunciationError) {
+          const message =
+            pronunciationError instanceof Error
+              ? pronunciationError.message
+              : 'Pronunciation evaluation failed';
+          this.logger.warn(
+            `Pronunciation skipped for session=${session.sessionId}: ${message}`,
+          );
+        }
+
+        this.send(client, WS_EVENTS.REPORT_READY, { report: enrichedReport });
+        this.logger.log(`Report ready for session=${session.sessionId}`);
+        session.isEndingSession = false;
+        return;
       }
 
-      this.send(client, WS_EVENTS.REPORT_READY, { report: enrichedReport });
-      this.logger.log(`Report ready for session=${session.sessionId}`);
+      session.pendingReport = {
+        ...session.pendingReport,
+        baseReport: report,
+        reportSent: session.pendingReport?.reportSent ?? false,
+        pronunciationTimedOut:
+          session.pendingReport?.pronunciationTimedOut ?? false,
+        pronunciationResult: session.pendingReport?.pronunciationResult,
+        waitTimeout: session.pendingReport?.waitTimeout,
+      };
+
+      this.tryDeliverReport(client, session);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Report generation failed';
       this.logger.error(`Report failed: ${message}`);
+      session.pendingReport = undefined;
+      session.isEndingSession = false;
       this.send(client, WS_EVENTS.ERROR, {
         code: 'REPORT_FAILED',
         message,

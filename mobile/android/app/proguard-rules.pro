@@ -8,3 +8,7 @@
 #   http://developer.android.com/guide/developing/tools/proguard.html
 
 # Add any project specific keep options here:
+-keep class com.tt.** { *; }
+-keep class com.xs.** { *; }
+-keep interface com.xs.** { *; }
+-keep enum com.xs.** { *; }

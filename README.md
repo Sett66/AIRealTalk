@@ -41,7 +41,7 @@
 | 语音识别 ASR | 阿里云 NLS | Backend 代理，Key 不进 Mobile |
 | 语音合成 TTS | 阿里云 NLS | Backend 代理；Mobile 自研 Kotlin 模块流式播放 PCM |
 | 大语言模型 | DeepSeek API | 场景对话、轻提示纠错、课后报告文案 |
-| 发音评测 | Mock（ssapi 后续接入） | 当前为模拟分数，见 [发音评测说明](#发音评测说明mock真实-ssapi-后续接入) |
+| 发音评测 | Mock 或真实（backend 授权 + Android 原生） | 默认 Mock；设 `USE_MOCK_PRONUNCIATION=false` 启用真实评测 |
 | 本地存储 | AsyncStorage | 练习摘要与完整报告持久化 |
 
 ---
@@ -60,7 +60,7 @@
 - [启动步骤（逐步）](#启动步骤逐步)
 - [功能验收路径](#功能验收路径)
 - [Mock 模式（备选，无 API Key 时）](#mock-模式备选无-api-key-时)
-- [发音评测说明（Mock，真实 ssapi 后续接入）](#发音评测说明mock真实-ssapi-后续接入)
+- [发音评测说明（Backend 授权 + Android 端侧打分）](#发音评测说明backend-授权--android-端侧打分)
 - [常见问题](#常见问题)
 - [项目结构](#项目结构)
 - [进一步文档](#进一步文档)
@@ -384,30 +384,32 @@ node scripts/verify-issue-09.mjs # 需 backend 已启动且 Mock 发音评测
 
 ---
 
-## 发音评测说明（Mock，真实 ssapi 后续接入）
+## 发音评测说明（Backend 授权 + Android 端侧打分）
 
-### 当前实现
+### 架构
 
-- 默认 **`USE_MOCK_PRONUNCIATION=true`**
-- Mock 服务：`backend/src/pronunciation/mock-pronunciation.service.ts`
-- 报告中的「发音均分」「逐句分数」为**模拟数据**，用于打通报告展示与历史趋势链路
-- 分数随 ASR 转写文本变化（非真实音频分析）
+| 层级 | 职责 |
+|------|------|
+| Backend | `POST /pronunciation/authorize` 签发 `warrant_id` 与短时连接签名（`app_secret` 不出服务端） |
+| Android | `PronunciationEngine` 原生模块对缓存 WAV 调用 ssapi WebSocket 评测 |
+| 报告组装 | `session:end` 后并行：backend 生成 LLM 报告 + mobile 提交 `pronunciation:submit`；默认一次 `report:ready` 含完整分数；超时则先发无发音分报告，再 `report:pronunciation_ready` 补发 |
 
-### 为何未接入真实 ssapi 口语评测
+### Mock 与真实模式
 
-阿里云智能科教口语评测（ssapi）的官方接入方式为：
+| 开关 | 行为 |
+|------|------|
+| `USE_MOCK_PRONUNCIATION=true`（默认） | Backend mock 打分；mobile 不调原生评测；`verify-issue-09.mjs` 可用 |
+| `USE_MOCK_PRONUNCIATION=false` | Mobile 并行评测并 `pronunciation:submit`；需配置 `ALIYUN_PRONUNCIATION_APP_ID/SECRET` |
 
-1. **Backend**：调用 `https://api.cloud.ssapi.cn/auth/authorize` 获取 `warrant_id`（已实现骨架，见 `backend/src/pronunciation/aliyun-pronunciation.client.ts`）
-2. **Android 端**：必须使用官方 **SingEngine Android SDK** 进行评测，并传入 backend 下发的 `warrant_id`
-3. **Backend 直连 WebSocket**（`wss://api.cloud.ssapi.cn`）在实测中不可用（404），不符合官方文档要求
+### 启用真实评测
 
-因此 MVP 阶段采用 Mock 发音评测；真实接入需新增 Android 原生模块 + backend 授权 API，作为**后续迭代**（已搁置，不影响其他功能评审）。
+1. 在智能科教平台申请口语评测 AppId / AppSecret，写入 `backend/.env`
+2. 设置 `USE_MOCK_PRONUNCIATION=false`，可选调整 `PRONUNCIATION_WAIT_MS`（默认 20000）
+3. **下载官方 Android SDK 包**，将在线版 `libbsound-3-android_*-SSL.so` 重命名为 `libssound.so`，放入 `mobile/android/app/src/main/jniLibs/arm64-v8a/`（模拟器另放 `x86_64/`）。详见该目录下 `README.md`
+4. 重启 backend，执行 `pnpm android` 重新编译安装
+5. 完成练习后报告应显示基于真实音频的发音分
 
-### 对评审的影响
-
-- **ASR / LLM / TTS**：配置 Key 后为真实云服务，可完整体验语音对话与 AI 纠错
-- **发音分数**：报告与历史页中的均分/逐句分为 **Mock 模拟值**，不代表真实发音水平
-- 代码中已预留 `AliyunPronunciationService` 与 authorize 逻辑，真实 ssapi 接入为后续迭代
+> **注意**：不能用 OkHttp 直连 `wss://api.cloud.ssapi.cn`（会 404）；必须使用官方 SingEngine SDK + `libssound.so`。
 
 ---
 
@@ -424,7 +426,8 @@ node scripts/verify-issue-09.mjs # 需 backend 已启动且 Mock 发音评测
 | 阿里云 ASR 失败 | 确认 NLS 项目已开通、AppKey 与 AccessKey 匹配 |
 | 报告生成失败 | 至少完成 1 轮对话后再点「结束练习」 |
 | Mock ASR 不识别我说的话 | 预期行为；Mock 固定返回预设文本，切换真实 ASR 即可 |
-| 发音分每次差不多 | Mock 模式下正常；真实 ssapi 尚未接入 |
+| 发音分每次差不多 | Mock 模式下正常；设 `USE_MOCK_PRONUNCIATION=false` 并配置评测 Key 后即为真实分数 |
+| 报告无发音分 | 评测超时或原生模块失败；可调大 `PRONUNCIATION_WAIT_MS` 或查看 logcat |
 
 ---
 

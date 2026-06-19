@@ -19,3 +19,11 @@ buildscript {
 }
 
 apply plugin: "com.facebook.react.rootproject"
+
+allprojects {
+    repositories {
+        maven {
+            url = uri("https://repo.singsound.com/repository/singsound_ginger_android_sdk/")
+        }
+    }
+}

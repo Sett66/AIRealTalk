@@ -59,15 +59,17 @@ export function ReportScreen({
             label="目标覆盖"
             value={`${report.goalCoverage}%`}
           />
-          {report.pronunciationAvg !== undefined && (
+          {report.pronunciationAvg !== undefined ? (
             <StatCard
               label="发音均分"
               value={String(report.pronunciationAvg)}
             />
-          )}
+          ) : report.turnCount > 0 ? (
+            <StatCard label="发音均分" value="评测中…" />
+          ) : null}
         </View>
 
-        {report.sentenceScores && report.sentenceScores.length > 0 && (
+        {report.sentenceScores && report.sentenceScores.length > 0 ? (
           <Section title="逐句发音评分">
             {report.sentenceScores.map((item, index) => (
               <View key={`${index}-${item.text}`} style={styles.sentenceRow}>
@@ -78,7 +80,11 @@ export function ReportScreen({
               </View>
             ))}
           </Section>
-        )}
+        ) : report.turnCount > 0 && report.pronunciationAvg === undefined ? (
+          <Section title="逐句发音评分">
+            <Text style={styles.emptyText}>发音评测进行中，请稍候…</Text>
+          </Section>
+        ) : null}
 
         <Section title="语法问题分类">
           {report.grammarIssues.length === 0 ? (

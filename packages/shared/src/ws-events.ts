@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { PronunciationSubmitPayloadSchema, type PronunciationSubmitPayload } from './pronunciation-submit.schema';
 import { SessionReportSchema, type SessionReport } from './session-report.schema';
 
 /** Canonical WS event type strings — use these instead of literals in app code */
@@ -18,6 +19,8 @@ export const WS_EVENTS = {
   TTS_CHUNK: 'tts:chunk',
   TTS_END: 'tts:end',
   REPORT_READY: 'report:ready',
+  REPORT_PRONUNCIATION_READY: 'report:pronunciation_ready',
+  PRONUNCIATION_SUBMIT: 'pronunciation:submit',
   ERROR: 'error',
 } as const;
 
@@ -30,6 +33,7 @@ export type WsEventMap = {
   [WS_EVENTS.AUDIO_CHUNK]: { data: string };
   [WS_EVENTS.AUDIO_END]: Record<string, never>;
   [WS_EVENTS.SESSION_END]: Record<string, never>;
+  [WS_EVENTS.PRONUNCIATION_SUBMIT]: PronunciationSubmitPayload;
   [WS_EVENTS.SESSION_PHASE]: { phase: 'processing' | 'speaking' };
   [WS_EVENTS.ASR_PARTIAL]: { text: string };
   [WS_EVENTS.ASR_FINAL]: { text: string; utteranceId: string };
@@ -38,6 +42,7 @@ export type WsEventMap = {
   [WS_EVENTS.TTS_CHUNK]: { data: string };
   [WS_EVENTS.TTS_END]: Record<string, never>;
   [WS_EVENTS.REPORT_READY]: { report: SessionReport };
+  [WS_EVENTS.REPORT_PRONUNCIATION_READY]: { report: SessionReport };
   [WS_EVENTS.ERROR]: { code: string; message: string };
 };
 
@@ -47,7 +52,8 @@ export type ClientWsEventType =
   | typeof WS_EVENTS.AUDIO_START
   | typeof WS_EVENTS.AUDIO_CHUNK
   | typeof WS_EVENTS.AUDIO_END
-  | typeof WS_EVENTS.SESSION_END;
+  | typeof WS_EVENTS.SESSION_END
+  | typeof WS_EVENTS.PRONUNCIATION_SUBMIT;
 
 export type ServerWsEventType =
   | typeof WS_EVENTS.SESSION_PONG
@@ -59,6 +65,7 @@ export type ServerWsEventType =
   | typeof WS_EVENTS.TTS_CHUNK
   | typeof WS_EVENTS.TTS_END
   | typeof WS_EVENTS.REPORT_READY
+  | typeof WS_EVENTS.REPORT_PRONUNCIATION_READY
   | typeof WS_EVENTS.ERROR;
 
 export type WsMessage<T extends keyof WsEventMap = keyof WsEventMap> = {
@@ -94,6 +101,10 @@ export const ClientWsEventSchema = z.discriminatedUnion('type', [
   }),
   z.object({ type: z.literal(WS_EVENTS.AUDIO_END), payload: z.object({}) }),
   z.object({ type: z.literal(WS_EVENTS.SESSION_END), payload: z.object({}) }),
+  z.object({
+    type: z.literal(WS_EVENTS.PRONUNCIATION_SUBMIT),
+    payload: PronunciationSubmitPayloadSchema,
+  }),
 ]);
 
 /** Server → Client WebSocket events (SPEC §5.2) */
@@ -129,6 +140,10 @@ export const ServerWsEventSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal(WS_EVENTS.TTS_END), payload: z.object({}) }),
   z.object({
     type: z.literal(WS_EVENTS.REPORT_READY),
+    payload: z.object({ report: SessionReportSchema }),
+  }),
+  z.object({
+    type: z.literal(WS_EVENTS.REPORT_PRONUNCIATION_READY),
     payload: z.object({ report: SessionReportSchema }),
   }),
   z.object({

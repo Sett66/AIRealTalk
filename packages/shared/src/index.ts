@@ -1,4 +1,6 @@
 export * from './health';
+export * from './pronunciation-authorize.schema';
+export * from './pronunciation-submit.schema';
 export * from './llm-turn-response.schema';
 export * from './practice-summary.schema';
 export * from './scenario.schema';
